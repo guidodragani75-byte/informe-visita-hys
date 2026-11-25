@@ -31,8 +31,7 @@ const finalHtml = tpl
 
 const outputs = [
   `${PROJ}/index.html`,
-  'C:/Users/cript/OneDrive/Escritorio/relevamiento-hys.html',
-  'C:/Users/cript/OneDrive/Escritorio/Antigravity/Varios/App Carrefour/relevamiento-hys.html'
+  'C:/Users/cript/OneDrive/Escritorio/relevamiento-hys.html'
 ];
 
 outputs.forEach(p => {
