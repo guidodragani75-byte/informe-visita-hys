@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Informe de Visita Técnica · Higiene y Seguridad en el Trabajo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>/*__INLINE_CSS__*/</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">INFORME DE VISITA TÉCNICA · HyS</div>
+      <nav class="top-nav-group">
+        <button class="top-nav-btn active" data-v="wizard" onclick="verVista('wizard')">Informe Actual</button>
+        <button class="top-nav-btn" data-v="biblioteca" onclick="verVista('biblioteca')">Informes Guardados</button>
+        <button class="top-nav-btn" data-v="agenda" onclick="verVista('agenda')">Agenda de Seguimiento</button>
+        <button class="top-nav-btn" data-v="preview" onclick="abrirVistaPrevia()">Vista Previa A4</button>
+      </nav>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" onclick="abrirModalIA()">Motor IA: <span id="lblModeloTop">Gemini 3 Flash (Deep)</span></button>
+      <a class="btn btn-ghost" href="__SHEET_URL__" target="_blank">Abrir Sheets</a>
+      <button class="btn btn-white" onclick="nuevoInforme()">+ Nuevo Informe</button>
+    </div>
+  </header>
+
+  <main class="main-wrap">
+    <div class="notice notice-err" id="noticeBox">
+      <span id="noticeMsg"></span>
+      <button class="btn btn-white btn-sm" onclick="cerrarAviso()">Cerrar</button>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- VISTA 1: WIZARD SECUENCIAL DE 5 PASOS                        -->
+    <!-- ============================================================ -->
+    <section class="app-view active" id="view-wizard">
+      <!-- FRANJA DE ESTADO DEL INFORME -->
+      <div class="status-strip" id="statusStrip">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span class="status-tag tag-borrador" id="lblEstadoInforme">Borrador</span>
+          <span style="font-size:12px; color:var(--muted);" id="lblMetaEstado">Informe nuevo sin guardar en la nube</span>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-white btn-sm" id="btnGuardarBorradorTop" onclick="guardarInformeNube('Borrador')">Guardar Borrador</button>
+          <button class="btn btn-primary btn-sm" id="btnReimprimirTop" style="display:none;" onclick="imprimirPDF()">Imprimir / Reimprimir PDF</button>
+          <button class="btn btn-white btn-sm allow-emitido" id="btnReabrirTop" style="display:none;" onclick="reabrirParaModificar()">Reabrir para modificar</button>
+        </div>
+      </div>
+
+      <!-- BARRA SECUENCIAL DE 5 PASOS -->
+      <div class="wizard-bar" id="wizardBar">
+        <button class="step-btn active" data-step="1" onclick="irPaso(1)">
+          <span class="step-num">Paso 1</span>
+          <span class="step-lbl">Carátula y Datos</span>
+        </button>
+        <button class="step-btn locked" data-step="2" onclick="irPaso(2)">
+          <span class="step-num">Paso 2</span>
+          <span class="step-lbl">Síntesis y Descripción</span>
+        </button>
+        <button class="step-btn locked" data-step="3" onclick="irPaso(3)">
+          <span class="step-num">Paso 3</span>
+          <span class="step-lbl">Fotos y Hallazgos</span>
+        </button>
+        <button class="step-btn locked" data-step="4" onclick="irPaso(4)">
+          <span class="step-num">Paso 4</span>
+          <span class="step-lbl">Lista de Verificación</span>
+        </button>
+        <button class="step-btn locked" data-step="5" onclick="irPaso(5)">
+          <span class="step-num">Paso 5</span>
+          <span class="step-lbl">Seguimiento, Agenda y Cierre</span>
+        </button>
+      </div>
+
+      <div id="wizardLockZone">
+        <!-- PASO 1: CARÁTULA -->
+        <div class="step-panel active" id="step-1">
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>Paso 1 · Carátula e Identificación del Establecimiento</h2>
+                <p>Complete todos los campos obligatorios (*) para habilitar la Síntesis de la visita.</p>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="field" style="grid-column: span 2;">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                  <label>Organismo (Padrón vivo desde Informes IAPSER) <span class="req">*</span></label>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="lblEstadoPadron" style="font-size:11px; color:var(--muted);">Cargando padrón desde Google Sheets...</span>
+                    <button class="btn btn-white btn-sm edit-only" onclick="cargarPadronIapser(true)">Actualizar padrón</button>
+                  </div>
+                </div>
+                <select class="select" id="f-organismo" onchange="alCambiarOrganismo()"></select>
+                <input class="input" id="f-organismo-manual" style="display:none; margin-top:6px;" placeholder="Escriba el nombre del organismo..." oninput="syncPaso1()">
+              </div>
+            </div>
+
+            <div style="background:var(--tint-soft); border:1px solid var(--border); border-radius:4px; padding:12px 14px; margin-bottom:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:10px; flex-wrap:wrap;">
+                <span style="font-size:11px; font-weight:700; color:var(--navy); text-transform:uppercase;">
+                  Selección de establecimiento del organismo (<span id="lblCantEstab">0</span> disponibles)
+                </span>
+                <input class="input" id="f-filtro-estab" style="width:270px; padding:4px 8px; font-size:12px;" placeholder="Filtrar desplegables por N°, calle o localidad..." oninput="poblarDesplegablesEstab()">
+              </div>
+              <div class="grid-2" style="margin-bottom:0;">
+                <div class="field" style="margin-bottom:0;">
+                  <label>Elegir por N° de Establecimiento</label>
+                  <select class="select" id="f-sel-nro" onchange="alSeleccionarEstablecimiento(this.value)"></select>
+                </div>
+                <div class="field" style="margin-bottom:0;">
+                  <label>Elegir por Domicilio / Localidad</label>
+                  <select class="select" id="f-sel-dom" onchange="alSeleccionarEstablecimiento(this.value)"></select>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="field"><label>Establecimiento N° <span class="req">*</span></label><input class="input" id="f-estNro" placeholder="Se completa al elegir establecimiento" oninput="syncPaso1()"></div>
+              <div class="field"><label>CUIT <span class="req">*</span></label><input class="input" id="f-cuit" placeholder="Ej: 30-XXXXXXXX-X" oninput="syncPaso1()"></div>
+              <div class="field"><label>Denominación / Nombre de la dependencia <span class="req">*</span></label><input class="input" id="f-denominacion" placeholder="Ej: Escuela / Oficina / Establecimiento (se completa al elegir)" oninput="syncPaso1()"></div>
+              <div class="field"><label>Domicilio y localidad <span class="req">*</span></label><input class="input" id="f-domicilio" placeholder="Se completa al elegir establecimiento" oninput="syncPaso1()"></div>
+              <div class="grid-2" style="gap:8px; margin-bottom:0; grid-column: span 2;">
+                <div class="field"><label>Fecha de visita <span class="req">*</span></label><input type="date" class="input" id="f-fechaVisita" oninput="syncPaso1()"></div>
+                <div class="field"><label>Hora <span class="req">*</span></label><input type="time" class="input" id="f-horaVisita" oninput="syncPaso1()"></div>
+              </div>
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label>Visita N° <span class="req">*</span></label>
+                <select class="select" id="f-visitaNro" onchange="syncPaso1()">
+                  <option value="">-- Seleccionar --</option>
+                  <option>Visita 1 - Relevamiento y diagnóstico</option>
+                  <option>Visita 2 - Seguimiento y capacitación</option>
+                  <option>Visita 3 - Evacuación</option>
+                  <option>Visita 4 - Control final</option>
+                </select>
+              </div>
+              <div class="field"><label>Profesional de HyS <span class="req">*</span></label><input class="input" id="f-profNombre" placeholder="Nombre y apellido" oninput="syncPaso1()"></div>
+              <div class="field"><label>Título y Matrícula <span class="req">*</span></label><input class="input" id="f-profMat" placeholder="Ej: Téc. en Hig. y Seg. · Mat. T0151" oninput="syncPaso1()"></div>
+            </div>
+            <div class="grid-3">
+              <div class="field"><label>Responsable del Establecimiento <span class="req">*</span></label><input class="input" id="f-respEst" placeholder="Nombre y cargo de quien recibe" oninput="syncPaso1()"></div>
+              <div class="field">
+                <label>Imagen aérea / fachada (opcional)</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="file" accept="image/*" class="input" onchange="cargarImgUnica('coverPhoto', event)">
+                  <button class="btn btn-danger-outline btn-sm edit-only" onclick="limpiarImgUnica('coverPhoto')">Quitar</button>
+                </div>
+                <div id="prev-coverPhoto" style="margin-top:6px;"></div>
+              </div>
+              <div class="field">
+                <label>Imagen de Firma y Sello (opcional)</label>
+                <div style="display:flex; gap:6px;">
+                  <input type="file" accept="image/*" class="input" onchange="cargarImgUnica('firmaImg', event)">
+                  <button class="btn btn-danger-outline btn-sm edit-only" onclick="limpiarImgUnica('firmaImg')">Quitar</button>
+                </div>
+                <div id="prev-firmaImg" style="margin-top:6px;"></div>
+              </div>
+            </div>
+            <div class="step-footer">
+              <span style="font-size:12px; color:var(--muted);">Todos los campos marcados con <span class="req">*</span> son obligatorios para continuar.</span>
+              <button class="btn btn-primary" onclick="avanzarDesde(1)">Validar y continuar a Paso 2 →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 2: SÍNTESIS Y DESCRIPCIÓN GUIADA DEL ESTABLECIMIENTO -->
+        <div class="step-panel" id="step-2">
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>Paso 2 · Descripción Guiada del Establecimiento y Síntesis de la Visita</h2>
+                <p>Complete los campos independientes de cada bloque; el informe los redactará automáticamente como párrafos técnicos ordenados.</p>
+              </div>
+            </div>
+
+            <!-- BLOQUE A: ACTIVIDAD -->
+            <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:10px;">
+              A. Actividad y funcionamiento
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label>Actividad principal del establecimiento <span class="req">*</span></label>
+                <input class="input" id="d-actividadGeneral" placeholder="Ej: escuela primaria pública de gestión estatal" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Modalidad, turnos y horarios <span class="req">*</span></label>
+                <input class="input" id="d-turnos" placeholder="Ej: jornada simple (turnos mañana 8:00–12:30 y tarde 13:30–18:00)" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Año de funcionamiento / antigüedad</label>
+                <input class="input" id="d-antiguedad" placeholder="Ej: Funciona en el edificio desde 1978" oninput="syncPaso2()">
+              </div>
+            </div>
+
+            <!-- BLOQUE B: EDIFICIO Y DISTRIBUCIÓN -->
+            <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:14px 0 10px 0;">
+              B. Edificio, superficie y distribución de sectores
+            </div>
+            <div class="grid-4">
+              <div class="field">
+                <label>Cantidad de pisos / plantas <span class="req">*</span></label>
+                <input type="number" min="1" class="input" id="d-pisos" placeholder="Ej: 2" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Superficie cubierta (m²) <span class="req">*</span></label>
+                <input type="number" class="input" id="d-superficie" placeholder="Ej: 1800" oninput="calcCategoriaPlan(); syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Sup. descubierta / patio (m²)</label>
+                <input type="number" class="input" id="d-supDescubierta" placeholder="Ej: 600" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Categoría Plan 2026</label>
+                <select class="select" id="f-categoria" onchange="syncPaso2()">
+                  <option value="AA">AA (>10.000 m² · 4 vis.)</option>
+                  <option value="A">A (2.501–10.000 m² · 4 vis.)</option>
+                  <option value="B">B (501–2.500 m² · 2 vis.)</option>
+                  <option value="C">C (hasta 500 m² · 1 vis.)</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Tipología constructiva <span class="req">*</span></label>
+                <input class="input" id="d-tipologia" placeholder="Ej: mampostería y losa de hormigón / estructura metálica con techo de chapa" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Espacios complementarios (SUM, patio, depósito externo)</label>
+                <input class="input" id="d-complementarios" placeholder="Ej: un SUM de 120 m² en planta baja" oninput="syncPaso2()">
+              </div>
+            </div>
+            <div style="margin-bottom:12px;">
+              <label class="chk-item" style="font-size:12px; color:var(--muted);">
+                <input type="checkbox" id="d-riesgoEspecial" onchange="calcCategoriaPlan(); syncPaso2()">
+                <span>Riesgo especial (taller, laboratorio, establecimiento de salud o depósito): elevar una categoría del plan.</span>
+              </label>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:10px 0 6px 0;">
+              <strong style="font-size:11.5px; color:var(--navy); text-transform:uppercase;">Distribución: sectores que componen el edificio y actividad de cada sector <span class="req">*</span></strong>
+              <button class="btn btn-white btn-sm edit-only" onclick="addSectorEst()">+ Agregar Sector</button>
+            </div>
+            <table class="inst-table">
+              <thead>
+                <tr>
+                  <th style="width:120px;">Piso / Nivel <span style="color:#fca5a5;">*</span></th>
+                  <th style="width:210px;">Sector <span style="color:#fca5a5;">*</span></th>
+                  <th>Actividad específica del sector <span style="color:#fca5a5;">*</span></th>
+                  <th style="width:90px;">Sup. (m²)</th>
+                  <th style="width:36px;"></th>
+                </tr>
+              </thead>
+              <tbody id="tb-sectores-est"></tbody>
+            </table>
+
+            <!-- BLOQUE C: PERSONAL Y OCUPACIÓN -->
+            <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:16px 0 10px 0;">
+              C. Personal y ocupación
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label>Cantidad total de trabajadores <span class="req">*</span></label>
+                <input type="number" min="0" class="input" id="d-cantTrabajadores" placeholder="Ej: 28" oninput="syncPaso2()">
+              </div>
+              <div class="field" style="grid-column: span 2;">
+                <label>Desglose por función / puesto <span class="req">*</span></label>
+                <input class="input" id="d-desglosePersonal" placeholder="Ej: 18 docentes, 2 directivos, 3 auxiliares de limpieza, 2 de cocina y 3 administrativos" oninput="syncPaso2()">
+              </div>
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label>Público / matrícula / usuarios por turno</label>
+                <input class="input" id="d-ocupacionPublico" placeholder="Ej: Matrícula de 420 alumnos: 210 turno mañana y 210 turno tarde" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Eventos o picos de concurrencia</label>
+                <input class="input" id="d-eventos" placeholder="Ej: Actos escolares y reuniones en el SUM, hasta 150 personas" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Personal tercerizado / contratistas</label>
+                <input class="input" id="d-tercerizados" placeholder="Ej: Sin personal tercerizado permanente, salvo limpieza fines de semana" oninput="syncPaso2()">
+              </div>
+            </div>
+
+            <!-- BLOQUE D: PROCESOS Y ACTIVIDADES -->
+            <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:14px 0 10px 0;">
+              D. Procesos y actividades
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Procesos y actividades principales <span class="req">*</span></label>
+                <input class="input" id="d-procesos" placeholder="Ej: dictado de clases, servicio de comedor escolar, educación física en el patio" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Tareas de mantenimiento o apoyo</label>
+                <input class="input" id="d-mantenimiento" placeholder="Ej: mantenimiento básico a cargo del personal auxiliar" oninput="syncPaso2()">
+              </div>
+            </div>
+
+            <!-- BLOQUE E: MATERIALES Y SUSTANCIAS -->
+            <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:14px 0 10px 0;">
+              E. Materiales y sustancias
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label>Insumos de limpieza / químicos y ubicación</label>
+                <input class="input" id="d-quimicos" placeholder="Ej: lavandina y desinfectantes en depósito junto a la cocina" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Gases / combustibles / inflamables y ubicación</label>
+                <input class="input" id="d-combustibles" placeholder="Ej: garrafas de gas para la cocina del comedor" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Otros materiales combustibles relevantes</label>
+                <input class="input" id="d-otrosMateriales" placeholder="Ej: material didáctico y papelería en biblioteca y dirección" oninput="syncPaso2()">
+              </div>
+            </div>
+
+            <!-- BLOQUE F: OBSERVACIONES Y ACCESOS -->
+            <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:14px 0 10px 0;">
+              F. Observaciones y limitaciones de la recorrida
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label>Sectores no accesibles / cerrados y motivo</label>
+                <input class="input" id="d-noAccesibles" placeholder="Ej: no se pudo acceder a sala de calderas ni terraza (cerradas, sin llave)" oninput="syncPaso2()">
+              </div>
+              <div class="field">
+                <label>Documentación o verificaciones pendientes en esta recorrida</label>
+                <input class="input" id="d-obsPendientes" placeholder="Ej: pendiente verificar habilitaciones, plano de evacuación y mediciones" oninput="syncPaso2()">
+              </div>
+            </div>
+
+            <!-- VISTA PREVIA EN VIVO EN FORMATO PÁRRAFOS -->
+            <div style="background:var(--tint-soft); border:1px solid #bfdbfe; border-left:4px solid var(--navy); border-radius:4px; padding:14px 16px; margin:14px 0 18px 0;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; gap:8px; flex-wrap:wrap;">
+                <strong style="font-size:12px; color:var(--navy); text-transform:uppercase;">Vista previa en párrafos (así saldrá en el Informe PDF)</strong>
+                <div style="display:flex; gap:6px;">
+                  <button class="btn btn-white btn-sm edit-only" onclick="pulirDescripcionConIA()">Pulir redacción con IA</button>
+                  <button class="btn btn-white btn-sm edit-only" onclick="limpiarTextoPersonalizadoDesc()">Restaurar armado automático</button>
+                </div>
+              </div>
+              <div id="descPreviewParrafos" style="font-size:12.5px; line-height:1.55; color:#111827;"></div>
+            </div>
+
+            <!-- OBJETO Y ALCANCE -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:16px 0 6px 0;">
+              <strong style="font-size:12.5px; color:var(--navy); text-transform:uppercase;">1. Objeto, alcance y criterio de relevamiento <span class="req">*</span></strong>
+              <button class="btn btn-white btn-sm edit-only" onclick="generarObjetoEstandar()">Autocompletar texto estándar</button>
+            </div>
+            <div class="field"><textarea class="textarea" id="s-obj1" placeholder="Objeto de la visita..." oninput="syncPaso2()"></textarea></div>
+            <div class="field"><textarea class="textarea" id="s-obj2" placeholder="Alcance y límites de la observación..." oninput="syncPaso2()"></textarea></div>
+
+            <!-- TAREAS PRINCIPALES REALIZADAS (PLAN HYS 2026) -->
+            <div class="field" style="margin-top:14px;">
+              <label>Acciones realizadas — Tareas del Plan HyS 2026 <span class="req">* (marcar al menos una; tildar una planilla la vuelve obligatoria)</span></label>
+              <div class="chk-grid" id="chk-acciones"></div>
+            </div>
+
+            <!-- TAREAS SECUNDARIAS: MEDICIONES Y DEMÁS -->
+            <div class="field">
+              <label>Tareas secundarias — Mediciones y demás actuaciones (opcional)</label>
+              <div class="chk-grid" id="chk-secundarias"></div>
+              <input class="input" style="margin-top:6px;" id="s-otroAccion" placeholder="Otra tarea secundaria / medición (opcional)..." oninput="syncPaso2()">
+            </div>
+
+            <div class="field">
+              <label>Estudios y documentos pendientes</label>
+              <div class="chk-grid" id="chk-pendientes"></div>
+              <input class="input" style="margin-top:6px;" id="s-pendNota" placeholder="Aclaración sobre pendientes (opcional)..." oninput="syncPaso2()">
+            </div>
+
+            <div class="field">
+              <label>Documentación entregada al establecimiento <span class="req">*</span></label>
+              <input class="input" id="s-docEntregada" placeholder="Ej: Constancia de visita firmada. Cartelería de salida de emergencia." oninput="syncPaso2()">
+            </div>
+
+            <div class="step-footer">
+              <button class="btn btn-white" onclick="irPaso(1)">← Volver a Paso 1</button>
+              <button class="btn btn-primary" onclick="avanzarDesde(2)">Validar y continuar a Paso 3 (Fotos) →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 3: FOTOS Y HALLAZGOS (ANTES DEL CHECKLIST PARA AUTOCOMPLETARLO) -->
+        <div class="step-panel" id="step-3">
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>Paso 3 · Registro Fotográfico y Hallazgos (Base Dec. 351/79)</h2>
+                <p>Suba las fotos de desvíos detectados. Al pasar al Paso 4, estos hallazgos autocompletarán la Lista de Verificación.</p>
+              </div>
+              <button class="btn btn-white btn-sm edit-only" onclick="agregarHallazgoManual()">+ Hallazgo sin foto</button>
+            </div>
+
+            <datalist id="sectoresDatalist"></datalist>
+
+            <div class="ai-box edit-only">
+              <div style="font-size:12px; font-weight:700; color:var(--navy); margin-bottom:8px;">
+                Subir fotografía(s) para análisis técnico IA (1 a 3 fotos por hallazgo · criterio anti-alucinación)
+              </div>
+              <div class="ai-box-row">
+                <div class="field" style="margin-bottom:0;">
+                  <label>Lugar / Sector de detección <span class="req">*</span></label>
+                  <input class="input" list="sectoresDatalist" id="ai-lugar-pre" placeholder="Seleccione un sector cargado o escriba la ubicación exacta">
+                </div>
+                <div class="field" style="margin-bottom:0;">
+                  <label>Nota breve de campo (opcional, aumenta precisión)</label>
+                  <input class="input" id="ai-nota-pre" placeholder="Ej: Matafuego vencido 2024 · Tablero sin contratapa ni diferencial">
+                </div>
+                <div>
+                  <label class="btn btn-primary" style="cursor:pointer; white-space:nowrap;">
+                    Subir foto(s) y analizar
+                    <input type="file" id="ai-file-input" multiple accept="image/*" style="display:none;" onchange="analizarConIAFlujo(event)">
+                  </label>
+                </div>
+              </div>
+              <div id="ai-status-line" style="margin-top:8px; font-size:12px; color:var(--navy); display:none; align-items:center; gap:8px;">
+                <span class="spinner"></span><span id="ai-status-txt">Analizando...</span>
+              </div>
+            </div>
+
+            <div id="hallazgosList"></div>
+
+            <div style="margin-top:12px; padding:10px 12px; background:var(--tint-soft); border:1px solid var(--border); border-radius:4px;">
+              <label class="chk-item">
+                <input type="checkbox" id="chk-sinDesviosFoto" onchange="state.sinDesviosFoto=this.checked; save();">
+                <span>No se detectaron desvíos fotográficos en esta visita (habilita avanzar al Paso 4 sin fotos).</span>
+              </label>
+              <div id="lbl-req-foto" style="display:none; margin-top:6px; font-size:11.5px; color:var(--danger); font-weight:600;"></div>
+            </div>
+
+            <div class="step-footer">
+              <button class="btn btn-white" onclick="irPaso(2)">← Volver a Paso 2</button>
+              <button class="btn btn-primary" onclick="avanzarDesde(3)">Autocompletar Lista de Verificación (Paso 4) →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 4: LISTA DE VERIFICACIÓN A1–E8 (AUTOCOMPLETADA Y EDITABLE) -->
+        <div class="step-panel" id="step-4">
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>Paso 4 · Lista de Verificación (49 puntos · Autocompletada desde Fotos y Pendientes)</h2>
+                <p>Revise los ítems autocompletados en NC/OBS y defina el estado (C / NC / OBS / NA) de los ítems restantes antes de avanzar.</p>
+              </div>
+              <div style="font-size:12px; font-weight:700; color:var(--navy);" id="lblResumenChk"></div>
+            </div>
+
+            <div id="checklistContainer"></div>
+
+            <div class="step-footer">
+              <button class="btn btn-white" onclick="irPaso(3)">← Volver a Paso 3 (Fotos)</button>
+              <button class="btn btn-primary" onclick="avanzarDesde(4)">Validar Lista y continuar a Paso 5 (Cierre y Agenda) →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 5: SEGUIMIENTO, AGENDA DE PRÓXIMAS VISITAS, ANEXOS, CONCLUSIÓN Y CIERRE -->
+        <div class="step-panel" id="step-5">
+          <!-- 5. SEGUIMIENTO -->
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>5. Seguimiento de hallazgos anteriores <span id="lbl-req-seg" style="font-size:11.5px; color:var(--danger); font-weight:600;"></span></h2>
+                <p>Cargue automáticamente los incumplimientos abiertos de visitas previas de este establecimiento o edite manualmente.</p>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-white btn-sm edit-only" onclick="traerHallazgosAnteriores()">Traer abiertos desde Sheets</button>
+                <button class="btn btn-white btn-sm edit-only" onclick="addSeguimiento()">+ Fila</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Nota introductoria del punto 5</label>
+              <input class="input" id="c-segIntro" oninput="syncPaso5()">
+            </div>
+            <table class="inst-table">
+              <thead>
+                <tr>
+                  <th style="width:58px;">ID</th><th style="width:100px;">Fecha origen</th><th>Hallazgo anterior</th>
+                  <th style="width:82px;">Plazo</th><th style="width:92px;">Est. anterior</th><th style="width:92px;">Est. actual</th>
+                  <th>Evidencia y verificación</th><th style="width:34px;"></th>
+                </tr>
+              </thead>
+              <tbody id="tb-seguimiento"></tbody>
+            </table>
+          </div>
+
+          <!-- AGENDA DE PRÓXIMAS VISITAS ACORDADAS -->
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>Agenda de Próximas Visitas Acordadas <span id="lbl-req-crono" style="font-size:11.5px; color:var(--danger); font-weight:600;"></span></h2>
+                <p>Estas fechas se guardarán junto con los vencimientos de cada incumplimiento en la pestaña Agenda_Seguimiento.</p>
+              </div>
+              <button class="btn btn-white btn-sm edit-only" onclick="addVisitaAcordada()">+ Agendar visita</button>
+            </div>
+            <table class="inst-table">
+              <thead>
+                <tr><th style="width:220px;">Tipo de visita</th><th style="width:150px;">Fecha acordada</th><th>Tareas previstas para esa visita</th><th style="width:34px;"></th></tr>
+              </thead>
+              <tbody id="tb-agenda-visitas"></tbody>
+            </table>
+          </div>
+
+          <!-- REGISTROS OBLIGATORIOS DE TAREAS TILDADAS EN PASO 2 (EPP, ERGO, CAP, RGRL/NTEAR) -->
+          <div class="sheet-card" id="card-registros-tareas" style="display:none;">
+            <div class="section-head">
+              <div>
+                <h2>Registros Obligatorios de Acciones Tildadas en Paso 2</h2>
+                <p>Complete el respaldo de cada acción del Plan HyS 2026 que seleccionó como realizada en esta visita.</p>
+              </div>
+            </div>
+            <div id="registrosTareasContainer"></div>
+          </div>
+
+          <!-- ANEXOS OPCIONALES / OBLIGATORIOS (PLANILLA 1 Y PLANILLA 2) -->
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>Planillas de Relevamiento Técnico (Plan HyS 2026)</h2>
+                <p>Si tildó Evacuación o Extintores/Hidrantes en el Paso 2, su planilla correspondiente se activa automáticamente como <strong>obligatoria</strong>.</p>
+              </div>
+            </div>
+
+            <div class="grid-2" style="margin-bottom:14px;">
+              <div class="field">
+                <label>Anexo · Planilla 1 (Relevamiento Plan de Evacuación) <span id="lbl-req-evac" style="color:var(--danger); font-weight:700;"></span></label>
+                <select class="select" id="st-evac" onchange="state.anexos.evacEstado=this.value; renderAnexos(); save();">
+                  <option value="Pendiente">Pendiente para próxima visita</option>
+                  <option value="Completado">Completado (cargar datos e imprimir anexo)</option>
+                  <option value="No aplica">No aplica</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Anexo · Planilla 2 (Control de Extintores e Hidrantes) <span id="lbl-req-ext" style="color:var(--danger); font-weight:700;"></span></label>
+                <select class="select" id="st-ext" onchange="state.anexos.extEstado=this.value; renderAnexos(); save();">
+                  <option value="Pendiente">Pendiente para próxima visita</option>
+                  <option value="Completado">Completado (cargar datos e imprimir anexo)</option>
+                  <option value="No aplica">No aplica</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- PLANILLA 1 DESPLEGABLE -->
+            <div id="wrap-anexo-evac" style="display:none; border-top:1px solid #e2e8f0; padding-top:14px; margin-bottom:16px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <strong>Planilla 1 · A. Sectores y ocupación (Evacuación)</strong>
+                <button class="btn btn-white btn-sm edit-only" onclick="addEvacSector()">+ Sector</button>
+              </div>
+              <table class="inst-table">
+                <thead><tr><th>Planta / sector</th><th>Sup. m²</th><th>Mañana</th><th>Tarde</th><th>Noche</th><th>Mov. reducida</th><th>Obs.</th><th style="width:32px;"></th></tr></thead>
+                <tbody id="tb-ev-sec"></tbody>
+              </table>
+              <div style="display:flex; justify-content:space-between; margin:10px 0 6px 0;">
+                <strong>Planilla 1 · B. Medios de salida</strong>
+                <button class="btn btn-white btn-sm edit-only" onclick="addEvacSalida()">+ Salida</button>
+              </div>
+              <table class="inst-table">
+                <thead><tr><th style="width:34px;">N°</th><th>Ubicación</th><th>Tipo</th><th>Ancho m</th><th>Apertura</th><th>Libre obst.</th><th>Señalizada</th><th>Foto</th><th style="width:32px;"></th></tr></thead>
+                <tbody id="tb-ev-sal"></tbody>
+              </table>
+              <strong style="display:block; margin:10px 0 6px 0;">Planilla 1 · C. Elementos de emergencia</strong>
+              <table class="inst-table">
+                <thead><tr><th>Elemento</th><th>Existe</th><th>Cant.</th><th>Ubicación</th><th>Estado</th><th>Foto</th></tr></thead>
+                <tbody id="tb-ev-elem"></tbody>
+              </table>
+              <strong style="display:block; margin:10px 0 6px 0;">Planilla 1 · D. Plano existente</strong>
+              <div class="grid-4">
+                <div class="field"><label>Existe</label><select class="select" id="ev-pl-ex" onchange="syncEvacPlano()"><option value="">--</option><option>Sí</option><option>No</option></select></div>
+                <div class="field"><label>Vigente</label><select class="select" id="ev-pl-vig" onchange="syncEvacPlano()"><option value="">--</option><option>Sí</option><option>No</option></select></div>
+                <div class="field"><label>Coincide</label><select class="select" id="ev-pl-coi" onchange="syncEvacPlano()"><option value="">--</option><option>Sí</option><option>No</option></select></div>
+                <div class="field"><label>Observaciones</label><input class="input" id="ev-pl-obs" oninput="syncEvacPlano()"></div>
+              </div>
+            </div>
+
+            <!-- PLANILLA 2 DESPLEGABLE -->
+            <div id="wrap-anexo-ext" style="display:none; border-top:1px solid #e2e8f0; padding-top:14px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                <strong>Planilla 2 · A. Extintores (ubicación de referencia obligatoria)</strong>
+                <button class="btn btn-white btn-sm edit-only" onclick="addExt()">+ Extintor</button>
+              </div>
+              <table class="inst-table">
+                <thead><tr><th style="width:32px;">N°</th><th>Ubicación de referencia *</th><th>Agente / kg</th><th>Venc. carga</th><th>Venc. PH</th><th>Manóm./prec.</th><th>Acceso</th><th>Desvío</th><th>Foto</th><th style="width:32px;"></th></tr></thead>
+                <tbody id="tb-ext"></tbody>
+              </table>
+              <div style="display:flex; justify-content:space-between; margin:10px 0 6px 0;">
+                <strong>Planilla 2 · B. Hidrantes / bocas de incendio</strong>
+                <button class="btn btn-white btn-sm edit-only" onclick="addHid()">+ Hidrante</button>
+              </div>
+              <table class="inst-table">
+                <thead><tr><th style="width:32px;">N°</th><th>Ubicación de referencia *</th><th>Gabinete</th><th>Manguera</th><th>Lanza</th><th>Llave</th><th>Acceso</th><th>Desvío</th><th>Foto</th><th style="width:32px;"></th></tr></thead>
+                <tbody id="tb-hid"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 6. CONCLUSIÓN Y CIERRE DEL INFORME -->
+          <div class="sheet-card">
+            <div class="section-head">
+              <div>
+                <h2>6. Conclusión, Prioridades y Cierre del Informe</h2>
+                <p>Guarde como Borrador para continuar después, o cierre y emita el informe para fijarlo en Sheets/Drive e imprimir el PDF A4.</p>
+              </div>
+              <button class="btn btn-white btn-sm edit-only" onclick="redactarConclusionIA()">Redactar conclusión con IA</button>
+            </div>
+            <div class="field">
+              <label>Conclusión y prioridades <span class="req">*</span></label>
+              <textarea class="textarea" id="c-conclusion" style="min-height:170px;" placeholder="Redacte las conclusiones técnicas prioritarias o utilice el botón 'Redactar conclusión con IA'." oninput="syncPaso5()"></textarea>
+            </div>
+
+            <div class="step-footer">
+              <button class="btn btn-white" onclick="irPaso(4)">← Volver a Paso 4</button>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-white edit-only" onclick="guardarInformeNube('Borrador')">Guardar Borrador (Sheets + Drive)</button>
+                <button class="btn btn-ok edit-only" onclick="cerrarYEmitirInforme()">Guardar y Cerrar Informe (Emitir)</button>
+                <button class="btn btn-primary allow-emitido" onclick="imprimirPDF()">Imprimir / Guardar PDF (A4)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- VISTA 2: BIBLIOTECA DE INFORMES GUARDADOS (SHEETS + DRIVE)   -->
+    <!-- ============================================================ -->
+    <section class="app-view" id="view-biblioteca">
+      <div class="sheet-card">
+        <div class="section-head">
+          <div>
+            <h2>Informes Guardados (Google Sheets + Drive)</h2>
+            <p>Reabra cualquier informe en estado Borrador o Emitido con todas sus fotos para modificarlo o volver a imprimirlo.</p>
+          </div>
+          <button class="btn btn-white btn-sm" onclick="cargarBibliotecaYAgenda()">Actualizar listado</button>
+        </div>
+        <div id="bibliotecaBody"><div style="color:var(--muted); padding:20px; text-align:center;">Cargando informes desde Google Sheets...</div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- VISTA 3: AGENDA DE SEGUIMIENTO                               -->
+    <!-- ============================================================ -->
+    <section class="app-view" id="view-agenda">
+      <div class="sheet-card">
+        <div class="section-head">
+          <div>
+            <h2>Agenda de Seguimiento · Vencimientos y Visitas Acordadas</h2>
+            <p>Consolidado automático de plazos de incumplimientos y fechas de visitas de seguimiento registradas en Sheets.</p>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input class="input" style="width:220px;" id="ag-filtro" placeholder="Filtrar establecimiento..." oninput="renderAgendaTabla()">
+            <select class="select" style="width:140px;" id="ag-estado" onchange="renderAgendaTabla()">
+              <option value="">Todos los estados</option>
+              <option value="Pendiente">Pendientes</option>
+              <option value="Cumplido">Cumplidos</option>
+              <option value="Reprogramado">Reprogramados</option>
+            </select>
+            <button class="btn btn-white btn-sm" onclick="cargarBibliotecaYAgenda()">Actualizar</button>
+          </div>
+        </div>
+        <div id="agendaBody"><div style="color:var(--muted); padding:20px; text-align:center;">Cargando agenda desde Google Sheets...</div></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- VISTA 4: VISTA PREVIA A4 OFICIAL                             -->
+    <!-- ============================================================ -->
+    <section class="app-view" id="view-preview">
+      <div class="no-print" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; background:#fff; padding:12px 16px; border:1px solid var(--border); border-radius:4px;">
+        <span style="font-size:12.5px; color:var(--muted);">Vista previa A4 oficial (Vertical en Carátula/Síntesis/Lista/Cierre · Horizontal en tabla de Hallazgos).</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-white" onclick="verVista('wizard')">Volver al editor</button>
+          <button class="btn btn-primary" onclick="imprimirPDF()">Imprimir / Guardar PDF</button>
+        </div>
+      </div>
+      <div class="doc-preview-wrap" id="docPreview"></div>
+    </section>
+  </main>
+
+  <!-- MODAL MOTOR IA -->
+  <div class="modal-bg" id="modalIA">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0; padding-bottom:10px; margin-bottom:14px;">
+        <h3 style="font-size:15px; color:var(--navy);">Configuración de Motor de IA (Visión Técnica)</h3>
+        <button class="btn btn-white btn-sm" onclick="cerrarModalIA()">Cerrar</button>
+      </div>
+      <div class="field">
+        <label>Proveedor y Modelo</label>
+        <select class="select" id="cfg-model">
+          <option value="gemini:gemini-3-flash-preview">Gemini 3 Flash · Razonamiento Profundo (Incluido / Rápido)</option>
+          <option value="gemini:gemini-3.6-flash">Gemini 3.6 Flash · Alta Precisión (Incluido)</option>
+          <option value="gemini:gemini-3.1-pro-preview">Gemini 3.1 Pro (Requiere facturación en Google AI Studio)</option>
+          <option value="openai:gpt-4o">OpenAI GPT-4o Vision (Requiere API Key de OpenAI)</option>
+          <option value="openai:gpt-4.1">OpenAI GPT-4.1 Vision (Requiere API Key de OpenAI)</option>
+        </select>
+      </div>
+      <div class="field"><label>Clave API Gemini (se guarda solo en tu navegador)</label><input type="password" class="input" id="cfg-geminiKey" placeholder="Pegá tu clave de Google AI Studio / Gemini..."></div>
+      <div class="field"><label>Clave API OpenAI (opcional)</label><input type="password" class="input" id="cfg-openaiKey" placeholder="sk-..."></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+        <button class="btn btn-white" onclick="cerrarModalIA()">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarConfigIA()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>/*__INLINE_JS__*/</script>
+</body>
+</html>
