@@ -146,16 +146,16 @@
               <div class="field">
                 <label>Imagen aérea / fachada (opcional)</label>
                 <div style="display:flex; gap:6px;">
-                  <input type="file" accept="image/*" class="input" onchange="cargarImgUnica('coverPhoto', event)">
-                  <button class="btn btn-danger-outline btn-sm edit-only" onclick="limpiarImgUnica('coverPhoto')">Quitar</button>
+                  <input type="file" id="inp-coverPhoto" accept="image/*" class="input" onchange="cargarImgUnica('coverPhoto', event)">
+                  <button type="button" class="btn btn-danger-outline btn-sm edit-only" onclick="limpiarImgUnica('coverPhoto')">Quitar</button>
                 </div>
                 <div id="prev-coverPhoto" style="margin-top:6px;"></div>
               </div>
               <div class="field">
                 <label>Imagen de Firma y Sello (opcional)</label>
                 <div style="display:flex; gap:6px;">
-                  <input type="file" accept="image/*" class="input" onchange="cargarImgUnica('firmaImg', event)">
-                  <button class="btn btn-danger-outline btn-sm edit-only" onclick="limpiarImgUnica('firmaImg')">Quitar</button>
+                  <input type="file" id="inp-firmaImg" accept="image/*" class="input" onchange="cargarImgUnica('firmaImg', event)">
+                  <button type="button" class="btn btn-danger-outline btn-sm edit-only" onclick="limpiarImgUnica('firmaImg')">Quitar</button>
                 </div>
                 <div id="prev-firmaImg" style="margin-top:6px;"></div>
               </div>
@@ -395,8 +395,9 @@
             <datalist id="sectoresDatalist"></datalist>
 
             <div class="ai-box edit-only">
-              <div style="font-size:12px; font-weight:700; color:var(--navy); margin-bottom:8px;">
-                Subir fotografía(s) para análisis técnico IA (1 a 3 fotos por hallazgo · criterio anti-alucinación)
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                <span style="font-size:12px; font-weight:700; color:var(--navy);">Subir fotografía(s) de hallazgos (1 a 3 fotos por hallazgo · criterio anti-alucinación)</span>
+                <span id="lbl-ai-key-hint" style="font-size:11px; color:var(--muted);"></span>
               </div>
               <div class="ai-box-row">
                 <div class="field" style="margin-bottom:0;">
@@ -407,15 +408,15 @@
                   <label>Nota breve de campo (opcional, aumenta precisión)</label>
                   <input class="input" id="ai-nota-pre" placeholder="Ej: Matafuego vencido 2024 · Tablero sin contratapa ni diferencial">
                 </div>
-                <div>
-                  <label class="btn btn-primary" style="cursor:pointer; white-space:nowrap;">
-                    Subir foto(s) y analizar
-                    <input type="file" id="ai-file-input" multiple accept="image/*" style="display:none;" onchange="analizarConIAFlujo(event)">
-                  </label>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                  <button type="button" class="btn btn-primary" style="white-space:nowrap;" onclick="document.getElementById('ai-file-input').click()">Subir foto(s) y analizar IA</button>
+                  <button type="button" class="btn btn-white" style="white-space:nowrap;" onclick="document.getElementById('manual-file-input').click()">+ Subir foto(s) sin IA</button>
+                  <input type="file" id="ai-file-input" multiple accept="image/*" style="position:fixed; left:-9999px; width:1px; height:1px; opacity:0;" onchange="subirFotosFlujo(event, true)">
+                  <input type="file" id="manual-file-input" multiple accept="image/*" style="position:fixed; left:-9999px; width:1px; height:1px; opacity:0;" onchange="subirFotosFlujo(event, false)">
                 </div>
               </div>
               <div id="ai-status-line" style="margin-top:8px; font-size:12px; color:var(--navy); display:none; align-items:center; gap:8px;">
-                <span class="spinner"></span><span id="ai-status-txt">Analizando...</span>
+                <span class="spinner"></span><span id="ai-status-txt">Procesando...</span>
               </div>
             </div>
 

@@ -1097,19 +1097,28 @@ function toggleChk(key, val, checked) {
 }
 
 function cargarImgUnica(key, ev) {
-  if (!ev.target.files?.length) return;
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
   const r = new FileReader();
   r.onload = async () => {
-    state.caratula[key] = await prepararImagen(r.result, key === 'firmaImg' ? 600 : 1200);
-    state.caratula[key + 'DriveId'] = '';
-    renderPrevUnica(key);
-    save();
+    try {
+      state.caratula[key] = await prepararImagen(r.result, key === 'firmaImg' ? 600 : 1200);
+      state.caratula[key + 'DriveId'] = '';
+      renderPrevUnica(key);
+      save();
+    } catch (err) {
+      avisar('No se pudo procesar la imagen seleccionada: ' + (err?.message || 'formato no compatible'), 'err');
+    }
   };
-  r.readAsDataURL(ev.target.files[0]);
+  r.onerror = () => avisar('No se pudo leer el archivo de imagen seleccionado.', 'err');
+  r.readAsDataURL(file);
 }
 function limpiarImgUnica(key) {
   state.caratula[key] = '';
   state.caratula[key + 'DriveId'] = '';
+  const inp = document.getElementById('inp-' + key);
+  if (inp) inp.value = '';
   renderPrevUnica(key);
   save();
 }
@@ -1178,6 +1187,13 @@ function actualizarTopModelo() {
     'openai:gpt-4.1': 'OpenAI GPT-4.1'
   };
   document.getElementById('lblModeloTop').innerText = map[cfg.model] || cfg.model;
+  const hint = document.getElementById('lbl-ai-key-hint');
+  if (hint) {
+    const hasKey = cfg.model.startsWith('openai:') ? !!cfg.openaiKey : !!cfg.geminiKey;
+    hint.innerHTML = hasKey
+      ? 'Motor IA listo'
+      : 'Sin clave cargada: <a href="#" onclick="abrirModalIA();return false;" style="color:var(--navy);font-weight:700;">Configurar en Motor IA</a> o usá «+ Subir foto(s) sin IA»';
+  }
 }
 function abrirModalIA() {
   const cfg = getAIConfig();
@@ -1197,7 +1213,12 @@ function guardarConfigIA() {
 }
 
 function fileToBase64(file) {
-  return new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(file); });
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('No se pudo leer el archivo ' + (file?.name || '')));
+    r.readAsDataURL(file);
+  });
 }
 function prepararImagen(dataUrl, maxDim = 1500) {
   return new Promise(res => {
@@ -1221,7 +1242,7 @@ function prepararImagen(dataUrl, maxDim = 1500) {
 const CHECKLIST_COMPACT = CHECKLIST_DEF.map(g => g.items.map(([id, t]) => `${id}: ${t}`).join(' | ')).join('\n');
 const CATS_351 = [...new Set(CATALOGO_351.map(c => c.cat))].join(', ');
 
-async function analizarConIAFlujo(ev) {
+async function subirFotosFlujo(ev, usarIA = true) {
   const files = Array.from(ev.target.files || []);
   ev.target.value = '';
   if (!files.length) return;
@@ -1236,8 +1257,31 @@ async function analizarConIAFlujo(ev) {
   const photos = [];
   for (const f of files) {
     stTxt.innerText = 'Optimizando ' + f.name + '...';
-    const raw = await fileToBase64(f);
-    photos.push({ dataUrl: await prepararImagen(raw), driveFileId: '', url: '' });
+    try {
+      const raw = await fileToBase64(f);
+      photos.push({ dataUrl: await prepararImagen(raw), driveFileId: '', url: '' });
+    } catch (e) {
+      avisar('No se pudo leer "' + esc(f.name) + '". Probá con una foto JPG/PNG.', 'err');
+    }
+  }
+  if (!photos.length) { stLine.style.display = 'none'; return; }
+
+  if (!usarIA) {
+    state.hallazgos.push({
+      uid: Date.now() + Math.random(),
+      ids: '', ubicacion: lugarPre, incumplimiento: notaPre, riesgo: '',
+      prioridad: 'Prioridad media', gravedad351: 'Moderado', medida: '',
+      responsable: 'Responsable del establecimiento / mantenimiento', plazo: '30 días',
+      fechaVencimiento: calcularFechaVencimiento(state.caratula.fechaVisita, '30 días'),
+      rgrl: '', cat351: '', estadoSeg: 'Abierto', photos
+    });
+    document.getElementById('ai-lugar-pre').value = '';
+    document.getElementById('ai-nota-pre').value = '';
+    renderHallazgos();
+    save();
+    stLine.style.display = 'none';
+    avisar(`Se cargaron <strong>${photos.length} foto(s)</strong> correctamente. Completá el hallazgo o vinculalo desde el buscador Dec. 351/79.`, 'ok');
+    return;
   }
 
   stTxt.innerText = `Analizando ${photos.length} foto(s) con ${document.getElementById('lblModeloTop').innerText}...`;
@@ -1278,7 +1322,7 @@ async function analizarConIAFlujo(ev) {
     });
     renderHallazgos();
     save();
-    avisar('No se pudo conectar con la IA (' + err.message + '). Las fotos se conservaron para completar con el buscador Dec. 351/79.', 'err');
+    avisar('Las fotos se cargaron bien, pero no se pudo analizar con IA (' + esc(err.message) + '). <a href="#" onclick="abrirModalIA();return false;" style="color:inherit;font-weight:700;text-decoration:underline;">Configurar Clave API en Motor IA</a> o completalo manualmente con el buscador Dec. 351/79.', 'info');
   } finally {
     stLine.style.display = 'none';
   }
@@ -1331,9 +1375,12 @@ Respondé EXCLUSIVAMENTE un JSON válido:
     return JSON.parse(d.choices[0].message.content);
   }
 
-  if (!cfg.geminiKey) { abrirModalIA(); throw new Error('Falta configurar tu Clave API de Gemini en "Motor IA" (se guarda localmente en el navegador)'); }
+  if (!cfg.geminiKey) throw new Error('Falta tu Clave API de Gemini');
   const parts = [{ text: prompt }];
-  imgsBase64.forEach(d => parts.push({ inlineData: { mimeType: 'image/jpeg', data: d.split(',')[1] } }));
+  imgsBase64.forEach(d => {
+    const m = String(d || '').match(/^data:([^;]+);base64,(.+)$/);
+    if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+  });
   const genCfg = { responseMimeType: 'application/json', temperature: 0.1 };
   if (modelName.includes('gemini-3')) genCfg.thinkingConfig = { thinkingBudget: 4096 };
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cfg.geminiKey}`, {
@@ -1485,10 +1532,8 @@ function renderHallazgos() {
                   <button class="photo-del-btn edit-only" onclick="quitarFotoHallazgo(${i}, ${pi})">×</button>
                 </div>
               `).join('')}
-            <label class="btn btn-white btn-sm edit-only" style="justify-content:center; cursor:pointer;">
-              + Agregar foto
-              <input type="file" multiple accept="image/*" style="display:none;" onchange="agregarFotoAHallazgo(${i}, event)">
-            </label>
+            <button type="button" class="btn btn-white btn-sm edit-only" style="justify-content:center;" onclick="document.getElementById('hfoto-${i}').click()">+ Agregar foto</button>
+            <input type="file" id="hfoto-${i}" multiple accept="image/*" style="position:fixed; left:-9999px; width:1px; height:1px; opacity:0;" onchange="agregarFotoAHallazgo(${i}, event)">
           </div>
         </div>
       </div>
