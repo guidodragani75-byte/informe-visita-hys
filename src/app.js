@@ -227,10 +227,47 @@ function crearEstadoVacio() {
   };
 }
 
+function normalizarEstadoCargado(raw) {
+  const base = crearEstadoVacio();
+  if (!raw || typeof raw !== 'object') return base;
+  const merged = Object.assign({}, base, raw);
+  merged.caratula = Object.assign({}, base.caratula, raw.caratula || {});
+  merged.descripcion = Object.assign({}, base.descripcion, raw.descripcion || {});
+  if (!Array.isArray(merged.descripcion.sectores)) merged.descripcion.sectores = [];
+  merged.sintesis = Object.assign({}, base.sintesis, raw.sintesis || {});
+  if (!Array.isArray(merged.sintesis.acciones)) merged.sintesis.acciones = [];
+  if (!Array.isArray(merged.sintesis.secundarias)) merged.sintesis.secundarias = [];
+  merged.registrosTareas = Object.assign({}, base.registrosTareas, raw.registrosTareas || {});
+  Object.keys(base.registrosTareas).forEach(k => {
+    merged.registrosTareas[k] = Object.assign({}, base.registrosTareas[k], merged.registrosTareas[k] || {});
+  });
+  merged.hallazgos = Array.isArray(raw.hallazgos) ? raw.hallazgos : [];
+  merged.seguimiento = Array.isArray(raw.seguimiento) ? raw.seguimiento : [];
+  merged.agendaVisitas = Array.isArray(raw.agendaVisitas) ? raw.agendaVisitas : [];
+  merged.checklist = Object.assign({}, base.checklist);
+  Object.keys(base.checklist).forEach(id => {
+    if (raw.checklist && raw.checklist[id]) {
+      merged.checklist[id] = Object.assign({}, base.checklist[id], raw.checklist[id]);
+    }
+  });
+  merged.anexos = Object.assign({}, base.anexos, raw.anexos || {});
+  merged.anexos.evac = Object.assign({}, base.anexos.evac, merged.anexos.evac || {});
+  if (!Array.isArray(merged.anexos.evac.sectores)) merged.anexos.evac.sectores = [];
+  if (!Array.isArray(merged.anexos.evac.salidas)) merged.anexos.evac.salidas = [];
+  if (!Array.isArray(merged.anexos.evac.elementos) || !merged.anexos.evac.elementos.length) {
+    merged.anexos.evac.elementos = base.anexos.evac.elementos;
+  }
+  merged.anexos.evac.plano = Object.assign({}, base.anexos.evac.plano, merged.anexos.evac.plano || {});
+  merged.anexos.fuego = Object.assign({}, base.anexos.fuego, merged.anexos.fuego || {});
+  if (!Array.isArray(merged.anexos.fuego.extintores)) merged.anexos.fuego.extintores = [];
+  if (!Array.isArray(merged.anexos.fuego.hidrantes)) merged.anexos.fuego.hidrantes = [];
+  return merged;
+}
+
 let state = (() => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return Object.assign(crearEstadoVacio(), JSON.parse(raw));
+    if (raw) return normalizarEstadoCargado(JSON.parse(raw));
   } catch (e) {}
   return crearEstadoVacio();
 })();
@@ -906,6 +943,7 @@ function syncPaso2() {
   d.visitaCompleta = document.getElementById('d-visitaCompleta').value;
   d.noAccesibles = document.getElementById('d-noAccesibles').value;
   d.obsPendientes = document.getElementById('d-obsPendientes').value;
+  d.parrafosIA = '';
 
   calcCategoriaPlan();
   state.sintesis.obj1 = document.getElementById('s-obj1').value;
@@ -1015,46 +1053,22 @@ async function pulirDescripcionConIA() {
   state.descripcion.parrafosIA = '';
   const borrador = construirParrafosDescripcion().map(p => `${p.titulo}: ${p.texto}`).join('\n\n');
   if (!borrador.trim()) { avisar('Complete primero algunos campos de la descripción antes de pulir la redacción.', 'info'); return; }
-  const cfg = getAIConfig();
-  const [provider, modelName] = cfg.model.split(':');
   avisar('Puliendo redacción de la descripción del establecimiento con IA...', 'info');
-  const prompt = `Reescribí únicamente para mejorar fluidez, concordancia y estilo técnico-profesional los siguientes 6 párrafos de descripción de un establecimiento para un Informe de Higiene y Seguridad en Argentina.
-REGLAS ESTRICTAS:
-1. Conservá exactamente los encabezados "Actividad:", "Edificio:", "Personal:", "Procesos y actividades:", "Materiales y sustancias:" y "Observaciones:" (solo incluí los que tengan datos).
-2. NO inventes ni agregues ningún número, dato, sector ni supuesto que no esté en el borrador.
-3. Devolvé texto plano separado por línea en blanco entre párrafos, sin markdown ni viñetas.
-
-BORRADOR:
-${borrador}`;
+  const systemPrompt = `Sos redactor técnico senior de Higiene y Seguridad en el Trabajo (Argentina).
+Tu única tarea es mejorar la redacción gramatical y cohesión de párrafos técnicos de un establecimiento SIN AGREGAR, INVENTAR NI ALTERAR ningún dato fáctico.
+REGLAS INQUEBRANTABLES:
+1. NO inventes ni modifiques superficies, pisos, cantidades de trabajadores, sectores, sustancias, equipos, fechas ni observaciones.
+2. Conservá exactamente los encabezados "Actividad:", "Edificio:", "Personal:", "Procesos y actividades:", "Materiales y sustancias:" y "Observaciones:" (solo incluí los que tengan información en el borrador).
+3. Devolvé texto plano separado por línea en blanco entre párrafos, sin markdown, asteriscos ni viñetas.`;
+  const userPrompt = `BORRADOR A PULIR (conservando 100% de los datos exactos):\n${borrador}`;
   try {
-    let out = '';
-    if (provider === 'openai') {
-      if (!cfg.openaiKey) throw new Error('Falta OpenAI API Key');
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.openaiKey },
-        body: JSON.stringify({ model: modelName, temperature: 0.15, messages: [{ role: 'user', content: prompt }] })
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
-      out = d.choices[0].message.content.trim();
-    } else {
-      if (!cfg.geminiKey) { abrirModalIA(); throw new Error('Falta configurar tu Clave API de Gemini en "Motor IA" (se guarda localmente en el navegador)'); }
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cfg.geminiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.15 } })
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
-      out = d.candidates[0].content.parts[0].text.trim();
-    }
+    const out = await llamarIAPrompt({ systemPrompt, userPrompt, temperature: 0.0, jsonMode: false, openModalOnMissingKey: true });
     state.descripcion.parrafosIA = out;
     renderPreviewParrafosPaso2();
     save();
     avisar('Redacción en párrafos pulida correctamente sin alterar tus datos.', 'ok');
   } catch (err) {
-    avisar('No se pudo pulir con IA: ' + err.message, 'err');
+    avisar('No se pudo pulir con IA: ' + esc(err.message), 'err');
   }
 }
 
@@ -1129,6 +1143,7 @@ function renderPrevUnica(key) {
 
 // SECTORES DEL ESTABLECIMIENTO (PASO 2)
 function addSectorEst() {
+  state.descripcion.parrafosIA = '';
   state.descripcion.sectores.push({ piso: 'Planta Baja', nombre: '', actividad: '', sup: '' });
   renderSectoresEst();
   actualizarDatalistSectores();
@@ -1136,6 +1151,7 @@ function addSectorEst() {
   save();
 }
 function delSectorEst(i) {
+  state.descripcion.parrafosIA = '';
   state.descripcion.sectores.splice(i, 1);
   renderSectoresEst();
   actualizarDatalistSectores();
@@ -1239,8 +1255,109 @@ function prepararImagen(dataUrl, maxDim = 1500) {
   });
 }
 
+const VALID_CHK_IDS = new Set(CHECKLIST_DEF.flatMap(g => g.items.map(([id]) => id)));
+const CATS_351_LIST = [...new Set(CATALOGO_351.map(c => c.cat))];
 const CHECKLIST_COMPACT = CHECKLIST_DEF.map(g => g.items.map(([id, t]) => `${id}: ${t}`).join(' | ')).join('\n');
-const CATS_351 = [...new Set(CATALOGO_351.map(c => c.cat))].join(', ');
+const CATS_351 = CATS_351_LIST.join(', ');
+
+function extraerTextoGemini(d) {
+  const parts = d?.candidates?.[0]?.content?.parts || [];
+  const txt = parts.filter(p => !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
+  if (!txt) throw new Error('La IA devolvió una respuesta vacía.');
+  return txt;
+}
+
+async function llamarIAPrompt({ systemPrompt, userPrompt, imgsBase64 = [], temperature = 0.0, jsonMode = false, useThinking = false, openModalOnMissingKey = false }) {
+  const cfg = getAIConfig();
+  const [provider, modelName] = cfg.model.split(':');
+
+  if (provider === 'openai') {
+    if (!cfg.openaiKey) {
+      if (openModalOnMissingKey) abrirModalIA();
+      throw new Error('Falta configurar tu OpenAI API Key en Motor IA');
+    }
+    const userContent = imgsBase64.length ? [{ type: 'text', text: userPrompt }] : userPrompt;
+    if (imgsBase64.length) {
+      imgsBase64.forEach(d => userContent.push({ type: 'image_url', image_url: { url: d, detail: 'high' } }));
+    }
+    const payload = {
+      model: modelName,
+      temperature,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent }
+      ]
+    };
+    if (jsonMode) payload.response_format = { type: 'json_object' };
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.openaiKey },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
+    return d.choices[0].message.content.trim();
+  }
+
+  if (!cfg.geminiKey) {
+    if (openModalOnMissingKey) abrirModalIA();
+    throw new Error('Falta tu Clave API de Gemini');
+  }
+  const parts = [{ text: userPrompt }];
+  imgsBase64.forEach(d => {
+    const m = String(d || '').match(/^data:([^;]+);base64,(.+)$/);
+    if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+  });
+  const genCfg = { temperature };
+  if (jsonMode) genCfg.responseMimeType = 'application/json';
+  if (useThinking && modelName.includes('gemini-3')) genCfg.thinkingConfig = { thinkingBudget: 4096 };
+
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cfg.geminiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ parts }],
+      generationConfig: genCfg
+    })
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
+  return extraerTextoGemini(d);
+}
+
+function sanitizarResultadoIA(res) {
+  const validPrio = ['Prioridad alta', 'Prioridad media', 'Prioridad baja'];
+  const validGrav = ['Grave', 'Moderado', 'Leve'];
+  const validPlazos = ['Inmediato', '15 días', '30 días', '60 días', '1 mes', '3 meses', '6 meses'];
+
+  const idsClean = String(res?.ids || '')
+    .toUpperCase()
+    .split(/[\s,;]+/)
+    .filter(id => VALID_CHK_IDS.has(id))
+    .slice(0, 3)
+    .join(' ');
+
+  const prio = validPrio.includes(res?.prioridad) ? res.prioridad : 'Prioridad media';
+  const grav = validGrav.includes(res?.gravedad351)
+    ? res.gravedad351
+    : (prio === 'Prioridad alta' ? 'Grave' : (prio === 'Prioridad baja' ? 'Leve' : 'Moderado'));
+  const plazo = validPlazos.includes(res?.plazo) ? res.plazo : '30 días';
+  const cat = CATS_351_LIST.includes(res?.cat351) ? res.cat351 : '';
+
+  return {
+    ids: idsClean,
+    ubicacionSugerida: String(res?.ubicacionSugerida || '').trim(),
+    incumplimiento: String(res?.incumplimiento || '').trim(),
+    riesgo: String(res?.riesgo || '').trim(),
+    prioridad: prio,
+    gravedad351: grav,
+    medida: String(res?.medida || '').trim(),
+    responsable: String(res?.responsable || '').trim(),
+    plazo,
+    cat351: cat
+  };
+}
 
 async function subirFotosFlujo(ev, usarIA = true) {
   const files = Array.from(ev.target.files || []);
@@ -1329,70 +1446,57 @@ async function subirFotosFlujo(ev, usarIA = true) {
 }
 
 async function llamarMotorIA(imgsBase64, lugarPre, notaPre) {
-  const cfg = getAIConfig();
-  const [provider, modelName] = cfg.model.split(':');
-  const prompt = `Sos Técnico/Licenciado Senior en Higiene y Seguridad en el Trabajo de Argentina (Ley 19.587, Decreto 351/79, AEA 90364, IRAM 3517).
-Redactá UNA FILA técnica para la sección "4. Hallazgos y medidas correctivas" de un Informe de Visita Técnica.
+  const systemPrompt = `Sos Técnico/Licenciado Senior en Higiene y Seguridad en el Trabajo de Argentina (Ley 19.587, Decreto 351/79, AEA 90364, IRAM 3517).
+Tu misión es redactar UNA FILA técnica objetiva para la sección "4. Hallazgos y medidas correctivas" de un Informe Oficial de Visita Técnica.
 
-REGLAS ANTI-ALUCINACIÓN (OBLIGATORIAS):
-1. Describí EXCLUSIVAMENTE lo objetivamente visible en la(s) fotografía(s) o informado en la nota de campo.
-2. NUNCA afirmes vencimientos de matafuegos, falta de puesta a tierra, falta de disyuntor o ausencia de insumos si NO es visible con certeza. Cuando requiera verificación en sitio, usá redacción prudente ("Verificar vigencia...", "No se identifica visualmente protección diferencial; verificar con electricista...").
-3. Tono institucional, sobrio y conciso (sin signos de exclamación).
-4. Mapeá los IDs exactos de nuestra Lista de Verificación:
-${CHECKLIST_COMPACT}
-5. Elegí la categoría exacta del Dec. 351/79 entre: ${CATS_351}.
+REGLAS ANTI-ALUCINACIÓN Y VERACIDAD CLÍNICA (OBLIGATORIAS):
+1. DESCRIBÍ SOLO LO QUE SE VE CON CERTEZA: basate exclusivamente en evidencia visual inequívoca de la(s) fotografía(s) y en la nota de campo del preventor. Si hay 2 o 3 fotos, corresponden al MISMO hallazgo/sector: consolidalas sin inventar elementos de otros lugares.
+2. PROHIBIDO INVENTAR O SUPONER LO QUE NO SE VE:
+   - NO afirmes vencimientos de carga o prueba hidráulica de matafuegos salvo que los números/fechas de la tarjeta sean claramente legibles en la foto. Si no se leen o están lejos, escribí: "Verificar vigencia de carga y prueba hidráulica en tarjeta/marbete".
+   - NO afirmes ausencia de disyuntor diferencial, termomagnética o puesta a tierra si el tablero está cerrado o no se distingue el interior. Usá: "Verificar existencia y ensayo de protección diferencial y puesta a tierra por electricista matriculado".
+   - NO supongas que falta botiquín, señalización, plano o luz de emergencia fuera del encuadre de la foto.
+   - NO inventes medidas exactas (metros, cm, lux, dBA, voltios, kg) ni números de artículos/resoluciones si no están escritos en la foto o en la nota.
+3. SI LA IMAGEN ES BORROSA, OSCURA O NO MUESTRA DESVÍO EVIDENTE: no inventes un problema. Indicá exactamente "Imagen sin desvío evidente a simple vista; verificar en sitio" y asigná prioridad "Prioridad baja".
+4. ADAPTATE AL CONTEXTO REAL: respetá la actividad del establecimiento indicada (hospital/salud, administración pública, laboratorio, depósito, etc.), evitando usar términos de otro rubro no relacionado.
+5. TONO Y FORMATO: sobrio, técnico, institucional, sin signos de exclamación ni adjetivos exagerados.`;
 
-CONTEXTO DEL ESTABLECIMIENTO Y CAMPO:
-- Actividad general: ${state.descripcion.actividadGeneral || '-'}
-- Lugar/Sector indicado: ${lugarPre || '(No indicado — sugerir brevemente el ambiente visible)'}
+  const userPrompt = `CONTEXTO DEL ESTABLECIMIENTO Y RELEVAMIENTO:
+- Organismo / Establecimiento: ${state.caratula.denominacion || '-'} (${state.caratula.organismo || '-'})
+- Actividad declarada: ${state.descripcion.actividadGeneral || 'Establecimiento público'}
+- Lugar / Sector indicado por preventor: ${lugarPre || '(No indicado — describir brevemente solo el sector/elemento visible)'}
 - Nota de campo del preventor: ${notaPre || '(Sin nota adicional)'}
 
-Respondé EXCLUSIVAMENTE un JSON válido:
+LISTA DE VERIFICACIÓN VÁLIDA (elegí hasta 3 códigos exactos que correspondan con certeza a lo visible; si ninguno aplica con seguridad, devolvé ""):
+${CHECKLIST_COMPACT}
+
+CATEGORÍAS DEC. 351/79 PERMITIDAS (elegí exactamente una literal de esta lista o ""):
+${CATS_351}
+
+Respondé EXCLUSIVAMENTE un objeto JSON válido con estas claves exactas:
 {
-  "ids": "Ej: C1 C2 o D2 D3 o B4",
-  "ubicacionSugerida": "Sector breve solo si no fue indicado",
-  "incumplimiento": "Descripción objetiva y precisa del desvío (máx. 2-3 oraciones).",
-  "riesgo": "Riesgo concreto (ej: Contacto eléctrico directo e indirecto e incendio).",
+  "ids": "Códigos exactos separados por espacio (ej: C1 C2) o vacío",
+  "ubicacionSugerida": "Sector breve solo si no fue indicado arriba",
+  "incumplimiento": "Descripción fáctica y prudente de lo visible (máx. 2-3 oraciones).",
+  "riesgo": "Riesgo concreto directo (ej: Contacto eléctrico directo/indirecto e incendio).",
   "prioridad": "Prioridad alta" | "Prioridad media" | "Prioridad baja",
   "gravedad351": "Grave" | "Moderado" | "Leve",
-  "medida": "Acción correctiva técnica concreta.",
+  "medida": "Acción correctiva o verificación técnica concreta.",
   "responsable": "Ej: Dirección / electricista matriculado · Responsable / mantenimiento",
   "plazo": "Inmediato" | "15 días" | "30 días" | "60 días" | "1 mes" | "3 meses" | "6 meses",
-  "cat351": "Categoría exacta del Dec. 351/79"
+  "cat351": "Una categoría literal exacta de la lista"
 }`;
 
-  if (provider === 'openai') {
-    if (!cfg.openaiKey) throw new Error('Falta configurar tu OpenAI API Key en Motor IA');
-    const content = [{ type: 'text', text: prompt }];
-    imgsBase64.forEach(d => content.push({ type: 'image_url', image_url: { url: d, detail: 'high' } }));
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.openaiKey },
-      body: JSON.stringify({ model: modelName, temperature: 0.1, response_format: { type: 'json_object' }, messages: [{ role: 'user', content }] })
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
-    return JSON.parse(d.choices[0].message.content);
-  }
-
-  if (!cfg.geminiKey) throw new Error('Falta tu Clave API de Gemini');
-  const parts = [{ text: prompt }];
-  imgsBase64.forEach(d => {
-    const m = String(d || '').match(/^data:([^;]+);base64,(.+)$/);
-    if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+  let txt = await llamarIAPrompt({
+    systemPrompt,
+    userPrompt,
+    imgsBase64,
+    temperature: 0.0,
+    jsonMode: true,
+    useThinking: true,
+    openModalOnMissingKey: false
   });
-  const genCfg = { responseMimeType: 'application/json', temperature: 0.1 };
-  if (modelName.includes('gemini-3')) genCfg.thinkingConfig = { thinkingBudget: 4096 };
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cfg.geminiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts }], generationConfig: genCfg })
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
-  let txt = d.candidates[0].content.parts[0].text.trim();
   txt = txt.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
-  return JSON.parse(txt);
+  return sanitizarResultadoIA(JSON.parse(txt));
 }
 
 function agregarHallazgoManual() {
@@ -2015,50 +2119,48 @@ function renderAnexos() {
 }
 
 async function redactarConclusionIA() {
-  const cfg = getAIConfig();
-  const [provider, modelName] = cfg.model.split(':');
   avisar('Redactando conclusión técnica en base a los datos reales del informe...', 'info');
   const ncs = Object.entries(state.checklist).filter(([,v]) => v.estado === 'NC' || v.estado === 'OBS').map(([id,v]) => `${id} (${v.estado}): ${v.obs}`).join('\n');
-  const hals = state.hallazgos.map(h => `[${h.ids}] ${h.ubicacion}: ${h.incumplimiento} (Plazo: ${h.plazo})`).join('\n');
-  const prompt = `Redactá la sección "6. Conclusión y prioridades" de un Informe de Visita Técnica de Higiene y Seguridad (4 a 6 párrafos sobrios, sin viñetas ni markdown, texto plano para recuadro oficial).
-Establecimiento: ${state.caratula.denominacion} (Est. N° ${state.caratula.estNro}), Fecha: ${fmtFechaAR(state.caratula.fechaVisita)}.
-Actividad: ${state.descripcion.actividadGeneral} (${state.descripcion.superficie} m², ${state.descripcion.pisos} piso(s)).
-Recorrida completa de pisos/sectores: ${state.descripcion.visitaCompleta || 'Sí'}${state.descripcion.visitaCompleta === 'No' && state.descripcion.noAccesibles ? ' (' + state.descripcion.noAccesibles + ')' : ''}.
-Ítems NC/OBS:
+  const hals = state.hallazgos.map(h => `[${h.ids || '-'}] ${h.ubicacion}: ${h.incumplimiento} (Prioridad: ${h.prioridad || '-'} · Plazo: ${h.plazo})`).join('\n');
+  const acciones = (state.sintesis.acciones || []).join(', ');
+  const secundarias = (state.sintesis.secundarias || []).join(', ');
+  const agenda = (state.agendaVisitas || []).filter(v => v.fecha).map(v => `${v.tipo} (${fmtFechaAR(v.fecha)}): ${v.tareas}`).join('\n');
+
+  const systemPrompt = `Sos Técnico/Licenciado Senior en Higiene y Seguridad en el Trabajo de Argentina.
+Redactá la sección "6. Conclusión y prioridades" de un Informe Oficial de Visita Técnica.
+REGLAS ANTI-ALUCINACIÓN (OBLIGATORIAS):
+1. Citá ÚNICAMENTE establecimientos, sectores, ítems NC/OBS, hallazgos, acciones realizadas y fechas de seguimiento presentes en los datos suministrados.
+2. PROHIBIDO inventar plazos, mediciones, porcentajes de cumplimiento o sectores no informados. Si algún bloque dice "Ninguno", no inventes hallazgos ni tareas adicionales.
+3. Formato: 3 a 5 párrafos institucionales sobrios en texto plano, sin viñetas ni markdown.`;
+
+  const userPrompt = `DATOS VERIFICADOS DEL INFORME:
+- Establecimiento: ${state.caratula.denominacion || '-'} (Est. N° ${state.caratula.estNro || 'S/N'}), Organismo: ${state.caratula.organismo || '-'}, Fecha: ${fmtFechaAR(state.caratula.fechaVisita)}.
+- Categoría Plan 2026: ${state.caratula.categoria || '-'} · Ciclo: ${state.caratula.visitaNro || '-'}.
+- Descripción base: ${state.descripcion.actividadGeneral || '-'} (${state.descripcion.superficie || '-'} m², ${state.descripcion.pisos || '-'} piso/s).
+- Recorrida de pisos y sectores: ${state.descripcion.visitaCompleta || 'Sin especificar'}${state.descripcion.visitaCompleta === 'No' && state.descripcion.noAccesibles ? ' (' + state.descripcion.noAccesibles + ')' : ''}.
+- Acciones principales realizadas: ${acciones || 'Ninguna'}.
+- Tareas secundarias / mediciones: ${secundarias || 'Ninguna'}.
+- Ítems NC/OBS en Lista de Verificación:
 ${ncs || 'Ninguno'}
-Hallazgos:
+- Hallazgos detectados:
 ${hals || 'Ninguno'}
-No inventes ningún dato no listado arriba.`;
+- Próximas visitas acordadas en Agenda:
+${agenda || 'Sin fechas acordadas'}`;
 
   try {
-    let out = '';
-    if (provider === 'openai') {
-      if (!cfg.openaiKey) throw new Error('Falta OpenAI API Key');
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.openaiKey },
-        body: JSON.stringify({ model: modelName, temperature: 0.2, messages: [{ role: 'user', content: prompt }] })
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
-      out = d.choices[0].message.content.trim();
-    } else {
-      if (!cfg.geminiKey) { abrirModalIA(); throw new Error('Falta configurar tu Clave API de Gemini en "Motor IA" (se guarda localmente en el navegador)'); }
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${cfg.geminiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2 } })
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || 'HTTP ' + r.status);
-      out = d.candidates[0].content.parts[0].text.trim();
-    }
+    const out = await llamarIAPrompt({
+      systemPrompt,
+      userPrompt,
+      temperature: 0.1,
+      jsonMode: false,
+      openModalOnMissingKey: true
+    });
     state.conclusion = out;
     document.getElementById('c-conclusion').value = out;
     save();
-    avisar('Conclusión generada. Revisala antes de cerrar el informe.', 'ok');
+    avisar('Conclusión generada en base a los datos reales del informe. Revisala antes de emitir.', 'ok');
   } catch (err) {
-    avisar('Error generando conclusión: ' + err.message, 'err');
+    avisar('Error generando conclusión: ' + esc(err.message), 'err');
   }
 }
 
@@ -2203,7 +2305,7 @@ async function abrirInformeDesdeDrive(idVisita) {
     const r = await fetch(WEBAPP_URL + '?action=load&id=' + encodeURIComponent(idVisita));
     const d = await r.json();
     if (!d.ok || !d.informe) throw new Error(d.error || 'No se pudo cargar el informe');
-    state = Object.assign(crearEstadoVacio(), d.informe);
+    state = normalizarEstadoCargado(d.informe);
     state.pasoMaxHabilitado = 5;
     state.pasoActual = state.estadoInforme === 'Emitido' ? 5 : (state.pasoActual || 1);
     save();
