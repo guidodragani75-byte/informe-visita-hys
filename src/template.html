@@ -119,12 +119,12 @@
 
             <div class="grid-2">
               <div class="field"><label>Establecimiento N° <span class="req">*</span></label><input class="input" id="f-estNro" placeholder="Se completa al elegir establecimiento" oninput="syncPaso1()"></div>
-              <div class="field"><label>CUIT <span class="req">*</span></label><input class="input" id="f-cuit" placeholder="Ej: 30-XXXXXXXX-X" oninput="syncPaso1()"></div>
-              <div class="field"><label>Denominación / Nombre de la dependencia <span class="req">*</span></label><input class="input" id="f-denominacion" placeholder="Ej: Escuela / Oficina / Establecimiento (se completa al elegir)" oninput="syncPaso1()"></div>
+              <div class="field"><label>CUIT <span class="req">* (se completa desde Informes IAPSER)</span></label><input class="input" id="f-cuit" placeholder="Se completa al elegir el organismo" oninput="syncPaso1()"></div>
+              <div class="field"><label>Denominación / Nombre de la dependencia <span class="req">*</span></label><input class="input" id="f-denominacion" placeholder="Ej: Hospital San Martín / Centro de Salud / Dependencia (se completa al elegir)" oninput="syncPaso1()"></div>
               <div class="field"><label>Domicilio y localidad <span class="req">*</span></label><input class="input" id="f-domicilio" placeholder="Se completa al elegir establecimiento" oninput="syncPaso1()"></div>
               <div class="grid-2" style="gap:8px; margin-bottom:0; grid-column: span 2;">
                 <div class="field"><label>Fecha de visita <span class="req">*</span></label><input type="date" class="input" id="f-fechaVisita" oninput="syncPaso1()"></div>
-                <div class="field"><label>Hora <span class="req">*</span></label><input type="time" class="input" id="f-horaVisita" oninput="syncPaso1()"></div>
+                <div class="field"><label>Hora (opcional)</label><input type="time" class="input" id="f-horaVisita" oninput="syncPaso1()"></div>
               </div>
             </div>
             <div class="grid-3">
@@ -184,15 +184,15 @@
             <div class="grid-3">
               <div class="field">
                 <label>Actividad principal del establecimiento <span class="req">*</span></label>
-                <input class="input" id="d-actividadGeneral" placeholder="Ej: escuela primaria pública de gestión estatal" oninput="syncPaso2()">
+                <input class="input" id="d-actividadGeneral" placeholder="Ej: hospital general / centro de atención primaria / oficina administrativa" oninput="syncPaso2()">
               </div>
               <div class="field">
-                <label>Modalidad, turnos y horarios <span class="req">*</span></label>
-                <input class="input" id="d-turnos" placeholder="Ej: jornada simple (turnos mañana 8:00–12:30 y tarde 13:30–18:00)" oninput="syncPaso2()">
+                <label>Modalidad, turnos y horarios</label>
+                <input class="input" id="d-turnos" placeholder="Ej: guardia 24 h y consultorios externos de 7:00 a 19:00" oninput="syncPaso2()">
               </div>
               <div class="field">
                 <label>Año de funcionamiento / antigüedad</label>
-                <input class="input" id="d-antiguedad" placeholder="Ej: Funciona en el edificio desde 1978" oninput="syncPaso2()">
+                <input class="input" id="d-antiguedad" placeholder="Ej: Edificio principal de 1965 con sector de guardia ampliado" oninput="syncPaso2()">
               </div>
             </div>
 
@@ -203,20 +203,21 @@
             <div class="grid-4">
               <div class="field">
                 <label>Cantidad de pisos / plantas <span class="req">*</span></label>
-                <input type="number" min="1" class="input" id="d-pisos" placeholder="Ej: 2" oninput="syncPaso2()">
+                <input type="number" min="1" class="input" id="d-pisos" placeholder="Ej: 3" oninput="syncPaso2()">
               </div>
               <div class="field">
-                <label>Superficie cubierta (m²) <span class="req">*</span></label>
-                <input type="number" class="input" id="d-superficie" placeholder="Ej: 1800" oninput="calcCategoriaPlan(); syncPaso2()">
+                <label>Superficie cubierta (m²) <span class="req">* (define Categoría)</span></label>
+                <input type="number" min="1" class="input" id="d-superficie" placeholder="Ej: 4200" oninput="calcCategoriaPlan(); syncPaso2()">
               </div>
               <div class="field">
                 <label>Sup. descubierta / patio (m²)</label>
-                <input type="number" class="input" id="d-supDescubierta" placeholder="Ej: 600" oninput="syncPaso2()">
+                <input type="number" min="0" class="input" id="d-supDescubierta" placeholder="Ej: 850" oninput="syncPaso2()">
               </div>
               <div class="field">
-                <label>Categoría Plan 2026</label>
-                <select class="select" id="f-categoria" onchange="syncPaso2()">
-                  <option value="AA">AA (>10.000 m² · 4 vis.)</option>
+                <label>Categoría Plan 2026 <span style="font-weight:400; color:var(--muted);">(según m²)</span></label>
+                <select class="select" id="f-categoria" disabled style="background:#f1f5f9; font-weight:700; color:var(--navy);">
+                  <option value="">-- Ingrese m² --</option>
+                  <option value="AA">AA (&gt;10.000 m² · 4 vis.)</option>
                   <option value="A">A (2.501–10.000 m² · 4 vis.)</option>
                   <option value="B">B (501–2.500 m² · 2 vis.)</option>
                   <option value="C">C (hasta 500 m² · 1 vis.)</option>
@@ -225,18 +226,18 @@
             </div>
             <div class="grid-2">
               <div class="field">
-                <label>Tipología constructiva <span class="req">*</span></label>
-                <input class="input" id="d-tipologia" placeholder="Ej: mampostería y losa de hormigón / estructura metálica con techo de chapa" oninput="syncPaso2()">
+                <label>Tipología constructiva</label>
+                <input class="input" id="d-tipologia" placeholder="Ej: mampostería y losa de hormigón / tabiquería sanitaria" oninput="syncPaso2()">
               </div>
               <div class="field">
-                <label>Espacios complementarios (SUM, patio, depósito externo)</label>
-                <input class="input" id="d-complementarios" placeholder="Ej: un SUM de 120 m² en planta baja" oninput="syncPaso2()">
+                <label>Espacios complementarios (playa, depósito externo, SUM)</label>
+                <input class="input" id="d-complementarios" placeholder="Ej: playa de ambulancias, sala de gases medicinales y depósito de residuos" oninput="syncPaso2()">
               </div>
             </div>
             <div style="margin-bottom:12px;">
-              <label class="chk-item" style="font-size:12px; color:var(--muted);">
+              <label class="chk-item" style="font-size:12px; color:var(--navy); font-weight:600;">
                 <input type="checkbox" id="d-riesgoEspecial" onchange="calcCategoriaPlan(); syncPaso2()">
-                <span>Riesgo especial (taller, laboratorio, establecimiento de salud o depósito): elevar una categoría del plan.</span>
+                <span>Riesgo especial (establecimiento de salud / hospital, laboratorio, taller o depósito): eleva automáticamente una categoría del Plan 2026.</span>
               </label>
             </div>
 
@@ -257,32 +258,22 @@
               <tbody id="tb-sectores-est"></tbody>
             </table>
 
-            <!-- BLOQUE C: PERSONAL Y OCUPACIÓN -->
+            <!-- BLOQUE C: PERSONAL -->
             <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:16px 0 10px 0;">
-              C. Personal y ocupación
+              C. Personal del establecimiento
             </div>
             <div class="grid-3">
               <div class="field">
                 <label>Cantidad total de trabajadores <span class="req">*</span></label>
-                <input type="number" min="0" class="input" id="d-cantTrabajadores" placeholder="Ej: 28" oninput="syncPaso2()">
-              </div>
-              <div class="field" style="grid-column: span 2;">
-                <label>Desglose por función / puesto <span class="req">*</span></label>
-                <input class="input" id="d-desglosePersonal" placeholder="Ej: 18 docentes, 2 directivos, 3 auxiliares de limpieza, 2 de cocina y 3 administrativos" oninput="syncPaso2()">
-              </div>
-            </div>
-            <div class="grid-3">
-              <div class="field">
-                <label>Público / matrícula / usuarios por turno</label>
-                <input class="input" id="d-ocupacionPublico" placeholder="Ej: Matrícula de 420 alumnos: 210 turno mañana y 210 turno tarde" oninput="syncPaso2()">
+                <input type="number" min="0" class="input" id="d-cantTrabajadores" placeholder="Ej: 185" oninput="syncPaso2()">
               </div>
               <div class="field">
-                <label>Eventos o picos de concurrencia</label>
-                <input class="input" id="d-eventos" placeholder="Ej: Actos escolares y reuniones en el SUM, hasta 150 personas" oninput="syncPaso2()">
+                <label>Desglose por función / servicio</label>
+                <input class="input" id="d-desglosePersonal" placeholder="Ej: médicos, enfermería, técnicos, limpieza, cocina, mantenimiento y admin." oninput="syncPaso2()">
               </div>
               <div class="field">
                 <label>Personal tercerizado / contratistas</label>
-                <input class="input" id="d-tercerizados" placeholder="Ej: Sin personal tercerizado permanente, salvo limpieza fines de semana" oninput="syncPaso2()">
+                <input class="input" id="d-tercerizados" placeholder="Ej: servicio tercerizado de limpieza / seguridad / mantenimiento" oninput="syncPaso2()">
               </div>
             </div>
 
@@ -292,47 +283,41 @@
             </div>
             <div class="grid-2">
               <div class="field">
-                <label>Procesos y actividades principales <span class="req">*</span></label>
-                <input class="input" id="d-procesos" placeholder="Ej: dictado de clases, servicio de comedor escolar, educación física en el patio" oninput="syncPaso2()">
+                <label>Procesos y actividades principales</label>
+                <input class="input" id="d-procesos" placeholder="Ej: atención en guardia y consultorios, internación, laboratorio, esterilización" oninput="syncPaso2()">
               </div>
               <div class="field">
                 <label>Tareas de mantenimiento o apoyo</label>
-                <input class="input" id="d-mantenimiento" placeholder="Ej: mantenimiento básico a cargo del personal auxiliar" oninput="syncPaso2()">
+                <input class="input" id="d-mantenimiento" placeholder="Ej: mantenimiento edilicio, electromedicina, lavadero, cocina" oninput="syncPaso2()">
               </div>
             </div>
 
             <!-- BLOQUE E: MATERIALES Y SUSTANCIAS -->
             <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:14px 0 10px 0;">
-              E. Materiales y sustancias
+              E. Materiales, gases y sustancias
             </div>
             <div class="grid-3">
               <div class="field">
-                <label>Insumos de limpieza / químicos y ubicación</label>
-                <input class="input" id="d-quimicos" placeholder="Ej: lavandina y desinfectantes en depósito junto a la cocina" oninput="syncPaso2()">
+                <label>Insumos químicos / desinfectantes / reactivos</label>
+                <input class="input" id="d-quimicos" placeholder="Ej: hipoclorito, alcohol, formol o reactivos en depósito/laboratorio" oninput="syncPaso2()">
               </div>
               <div class="field">
-                <label>Gases / combustibles / inflamables y ubicación</label>
-                <input class="input" id="d-combustibles" placeholder="Ej: garrafas de gas para la cocina del comedor" oninput="syncPaso2()">
+                <label>Gases medicinales / combustibles / inflamables</label>
+                <input class="input" id="d-combustibles" placeholder="Ej: tubos de oxígeno medicinal, grupo electrógeno con gasoil" oninput="syncPaso2()">
               </div>
               <div class="field">
-                <label>Otros materiales combustibles relevantes</label>
-                <input class="input" id="d-otrosMateriales" placeholder="Ej: material didáctico y papelería en biblioteca y dirección" oninput="syncPaso2()">
+                <label>Otros materiales o residuos especiales</label>
+                <input class="input" id="d-otrosMateriales" placeholder="Ej: residuos patogénicos, descartables y archivo en depósito" oninput="syncPaso2()">
               </div>
             </div>
 
-            <!-- BLOQUE F: OBSERVACIONES Y ACCESOS -->
+            <!-- BLOQUE F: OBSERVACIONES ADICIONALES -->
             <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; border-bottom:1px solid var(--border); padding-bottom:4px; margin:14px 0 10px 0;">
-              F. Observaciones y limitaciones de la recorrida
+              F. Observaciones y documentación por verificar
             </div>
-            <div class="grid-2">
-              <div class="field">
-                <label>Sectores no accesibles / cerrados y motivo</label>
-                <input class="input" id="d-noAccesibles" placeholder="Ej: no se pudo acceder a sala de calderas ni terraza (cerradas, sin llave)" oninput="syncPaso2()">
-              </div>
-              <div class="field">
-                <label>Documentación o verificaciones pendientes en esta recorrida</label>
-                <input class="input" id="d-obsPendientes" placeholder="Ej: pendiente verificar habilitaciones, plano de evacuación y mediciones" oninput="syncPaso2()">
-              </div>
+            <div class="field">
+              <label>Aclaraciones adicionales / documentación pendiente de verificación en sitio</label>
+              <input class="input" id="d-obsPendientes" placeholder="Ej: pendiente exhibición de plano de evacuación, protocolos de medición o habilitaciones" oninput="syncPaso2()">
             </div>
 
             <!-- VISTA PREVIA EN VIVO EN FORMATO PÁRRAFOS -->
@@ -369,14 +354,24 @@
             </div>
 
             <div class="field">
-              <label>Estudios y documentos pendientes</label>
-              <div class="chk-grid" id="chk-pendientes"></div>
-              <input class="input" style="margin-top:6px;" id="s-pendNota" placeholder="Aclaración sobre pendientes (opcional)..." oninput="syncPaso2()">
+              <label>Documentación entregada al establecimiento (opcional)</label>
+              <input class="input" id="s-docEntregada" placeholder="Ej: Constancia de visita firmada. Cartelería de salida de emergencia." oninput="syncPaso2()">
             </div>
 
-            <div class="field">
-              <label>Documentación entregada al establecimiento <span class="req">*</span></label>
-              <input class="input" id="s-docEntregada" placeholder="Ej: Constancia de visita firmada. Cartelería de salida de emergencia." oninput="syncPaso2()">
+            <!-- PREGUNTA OBLIGATORIA ANTES DE PASAR AL PASO 3 -->
+            <div style="background:#fffbeb; border:1px solid #fcd34d; border-left:4px solid var(--warn); border-radius:4px; padding:12px 14px; margin-top:14px;">
+              <div class="field" style="margin-bottom:0;">
+                <label style="color:var(--navy);">¿Pudiste visitar todos los pisos y sectores del establecimiento? <span class="req">*</span></label>
+                <select class="select" id="d-visitaCompleta" onchange="alCambiarVisitaCompleta()">
+                  <option value="">-- Seleccionar --</option>
+                  <option value="Sí">Sí, se recorrieron todos los pisos y sectores</option>
+                  <option value="No">No, quedaron pisos o sectores sin visitar</option>
+                </select>
+              </div>
+              <div id="wrap-noAccesibles" style="display:none; margin-top:10px;">
+                <label style="display:block; font-size:11px; font-weight:700; color:var(--danger); text-transform:uppercase; margin-bottom:4px;">Especifique qué pisos o sectores no pudieron visitarse y el motivo <span class="req">*</span></label>
+                <textarea class="textarea" id="d-noAccesibles" style="min-height:60px;" placeholder="Ej: No se pudo ingresar a Sala de Máquinas ni Subsuelo por encontrarse cerrados sin llave disponible." oninput="syncPaso2()"></textarea>
+              </div>
             </div>
 
             <div class="step-footer">

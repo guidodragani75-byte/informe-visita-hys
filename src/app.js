@@ -1,7 +1,8 @@
 const CATALOGO_351 = __CATALOGO_351__;
 let ESTABLECIMIENTOS_IAPSER = [];
 let ORGANISMOS_IAPSER = [];
-const PADRON_CACHE_KEY = "iapser_padron_cache_v1";
+let ORGANISMO_CUIT_MAP = {};
+const PADRON_CACHE_KEY = "iapser_padron_cache_v2";
 const SHEET_URL = "__SHEET_URL__";
 const WEBAPP_URL = "__WEBAPP_URL__";
 const DEFAULT_GEMINI_KEY = "";
@@ -125,24 +126,6 @@ const ACCION_ERGO = 'Estudios de ergonomía (Planillas 1 y 2)';
 const ACCION_CAP_HYS = 'Capacitación básica en HyS';
 const ACCION_CAP_EVAC = 'Capacitación sobre roles y responsabilidades en caso de evacuación';
 
-const PENDIENTES_LIST = [
-  'Iluminación',
-  'Puesta a tierra',
-  'Ergonomía',
-  'Carga de fuego',
-  'Plan de evacuación',
-  'Documentación técnica'
-];
-
-// Mapeo automático de estudios pendientes -> IDs de checklist
-const PENDIENTE_A_IDS = {
-  'Iluminación': { ids: ['B7', 'A7'], nota: 'Estudio de iluminación pendiente. Se realizará en próxima visita.' },
-  'Puesta a tierra': { ids: ['C3', 'C4', 'A7'], nota: 'Medición de puesta a tierra y continuidad de masas pendiente.' },
-  'Ergonomía': { ids: ['E1', 'E2', 'A7'], nota: 'Evaluación ergonómica (Planillas 1 y 2) pendiente de realizar en próxima visita.' },
-  'Carga de fuego': { ids: ['D1'], nota: 'Estudio de carga de fuego pendiente de elaboración.' },
-  'Plan de evacuación': { ids: ['A9', 'D5', 'D6', 'D7', 'D8'], nota: 'Plan de evacuación, planos, señalización, roles y simulacro pendientes.' }
-};
-
 function crearEstadoVacio() {
   const checklist = {};
   CHECKLIST_DEF.forEach(g => g.items.forEach(([id]) => {
@@ -166,7 +149,7 @@ function crearEstadoVacio() {
       cuit: '',
       fechaVisita: '',
       horaVisita: '',
-      categoria: 'B',
+      categoria: '',
       visitaNro: '',
       profNombre: '',
       profMat: '',
@@ -189,14 +172,13 @@ function crearEstadoVacio() {
       sectores: [],
       cantTrabajadores: '',
       desglosePersonal: '',
-      ocupacionPublico: '',
-      eventos: '',
       tercerizados: '',
       procesos: '',
       mantenimiento: '',
       quimicos: '',
       combustibles: '',
       otrosMateriales: '',
+      visitaCompleta: '',
       noAccesibles: '',
       obsPendientes: '',
       parrafosIA: ''
@@ -207,8 +189,6 @@ function crearEstadoVacio() {
       acciones: [],
       secundarias: [],
       otroAccion: '',
-      pendientes: [],
-      pendNota: '',
       docEntregada: ''
     },
     registrosTareas: {
@@ -389,7 +369,7 @@ function irPaso(n) {
 function avanzarDesde(paso) {
   if (!validarPaso(paso)) return;
   if (paso === 3) {
-    autocompletarChecklistDesdeFotosYPendientes();
+    autocompletarChecklistDesdeFotos();
   }
   if (paso === 4) {
     sincronizarChecklistNCaHallazgos();
@@ -424,7 +404,6 @@ function validarPaso(paso) {
     marcarInvalido('f-cuit', falt, 'CUIT');
     marcarInvalido('f-domicilio', falt, 'Domicilio y localidad');
     marcarInvalido('f-fechaVisita', falt, 'Fecha de visita');
-    marcarInvalido('f-horaVisita', falt, 'Hora de visita');
     marcarInvalido('f-visitaNro', falt, 'Visita N°');
     marcarInvalido('f-profNombre', falt, 'Profesional de HyS');
     marcarInvalido('f-profMat', falt, 'Título y Matrícula');
@@ -441,16 +420,16 @@ function validarPaso(paso) {
   if (paso === 2) {
     syncPaso2();
     marcarInvalido('d-actividadGeneral', falt, 'Actividad principal');
-    marcarInvalido('d-turnos', falt, 'Modalidad / turnos y horarios');
     marcarInvalido('d-pisos', falt, 'Cantidad de pisos');
     marcarInvalido('d-superficie', falt, 'Superficie cubierta (m²)');
-    marcarInvalido('d-tipologia', falt, 'Tipología constructiva');
-    marcarInvalido('d-cantTrabajadores', falt, 'Cantidad de trabajadores');
-    marcarInvalido('d-desglosePersonal', falt, 'Desglose de personal');
-    marcarInvalido('d-procesos', falt, 'Procesos y actividades');
+    marcarInvalido('d-cantTrabajadores', falt, 'Cantidad total de trabajadores');
     marcarInvalido('s-obj1', falt, 'Objeto de la visita');
-    marcarInvalido('s-obj2', falt, 'Alcance y límites');
-    marcarInvalido('s-docEntregada', falt, 'Documentación entregada');
+    marcarInvalido('d-visitaCompleta', falt, '¿Pudiste visitar todos los pisos y sectores?');
+    if (document.getElementById('d-visitaCompleta').value === 'No') {
+      marcarInvalido('d-noAccesibles', falt, 'Detalle de pisos/sectores no visitados');
+    } else {
+      document.getElementById('d-noAccesibles')?.classList.remove('invalid');
+    }
 
     if (state.descripcion.sectores.length === 0) {
       falt.push({ id: '', label: 'Al menos un Sector del establecimiento' });
@@ -627,6 +606,10 @@ async function cargarPadronIapser(forceRefresh = false) {
 function aplicarPadron(items, statusTxt) {
   ESTABLECIMIENTOS_IAPSER = items || [];
   ORGANISMOS_IAPSER = [...new Set(ESTABLECIMIENTOS_IAPSER.map(e => e.org))].sort((a, b) => a.localeCompare(b, 'es'));
+  ORGANISMO_CUIT_MAP = {};
+  ESTABLECIMIENTOS_IAPSER.forEach(e => {
+    if (e.org && e.cuit && !ORGANISMO_CUIT_MAP[e.org]) ORGANISMO_CUIT_MAP[e.org] = e.cuit;
+  });
   const lbl = document.getElementById('lblEstadoPadron');
   if (lbl) lbl.innerText = statusTxt;
   poblarOrganismos();
@@ -636,6 +619,11 @@ function aplicarPadron(items, statusTxt) {
   if (selOrg && c.organismo && ORGANISMOS_IAPSER.includes(c.organismo)) {
     selOrg.value = c.organismo;
     if (manOrg) { manOrg.style.display = 'none'; manOrg.value = ''; }
+    if (!c.cuit && ORGANISMO_CUIT_MAP[c.organismo]) {
+      c.cuit = ORGANISMO_CUIT_MAP[c.organismo];
+      const cuitEl = document.getElementById('f-cuit');
+      if (cuitEl) cuitEl.value = c.cuit;
+    }
   }
   poblarDesplegablesEstab();
 }
@@ -656,6 +644,13 @@ function alCambiarOrganismo() {
   const isOtro = sel.value === '__OTRO__';
   man.style.display = isOtro ? 'block' : 'none';
   if (document.getElementById('f-filtro-estab')) document.getElementById('f-filtro-estab').value = '';
+  const cuitEl = document.getElementById('f-cuit');
+  if (cuitEl && !isOtro && ORGANISMO_CUIT_MAP[sel.value]) {
+    cuitEl.value = ORGANISMO_CUIT_MAP[sel.value];
+    cuitEl.classList.remove('invalid');
+  } else if (cuitEl && isOtro) {
+    cuitEl.value = '';
+  }
   poblarDesplegablesEstab();
   syncPaso1();
 }
@@ -716,6 +711,11 @@ function alSeleccionarEstablecimiento(estId) {
   document.getElementById('f-estNro').value = item.nro || '';
   const domCompleto = [item.dom, item.loc, item.prov].filter(Boolean).join(', ');
   document.getElementById('f-domicilio').value = domCompleto;
+  const cuitAuto = item.cuit || ORGANISMO_CUIT_MAP[item.org] || '';
+  if (cuitAuto) {
+    document.getElementById('f-cuit').value = cuitAuto;
+    document.getElementById('f-cuit').classList.remove('invalid');
+  }
   if (item.nom) {
     document.getElementById('f-denominacion').value = item.nom;
   } else if (!document.getElementById('f-denominacion').value.trim()) {
@@ -760,7 +760,7 @@ function hidratarTodo() {
   document.getElementById('f-cuit').value = c.cuit || '';
   document.getElementById('f-fechaVisita').value = c.fechaVisita || '';
   document.getElementById('f-horaVisita').value = c.horaVisita || '';
-  document.getElementById('f-categoria').value = c.categoria || 'B';
+  document.getElementById('f-categoria').value = c.categoria || '';
   document.getElementById('f-visitaNro').value = c.visitaNro || '';
   document.getElementById('f-profNombre').value = c.profNombre || '';
   document.getElementById('f-profMat').value = c.profMat || '';
@@ -778,17 +778,18 @@ function hidratarTodo() {
   document.getElementById('d-tipologia').value = d.tipologia || '';
   document.getElementById('d-complementarios').value = d.complementarios || '';
   document.getElementById('d-riesgoEspecial').checked = !!d.riesgoEspecial;
+  if (d.superficie) calcCategoriaPlan();
   document.getElementById('d-cantTrabajadores').value = d.cantTrabajadores || '';
   document.getElementById('d-desglosePersonal').value = d.desglosePersonal || '';
-  document.getElementById('d-ocupacionPublico').value = d.ocupacionPublico || '';
-  document.getElementById('d-eventos').value = d.eventos || '';
   document.getElementById('d-tercerizados').value = d.tercerizados || '';
   document.getElementById('d-procesos').value = d.procesos || '';
   document.getElementById('d-mantenimiento').value = d.mantenimiento || '';
   document.getElementById('d-quimicos').value = d.quimicos || '';
   document.getElementById('d-combustibles').value = d.combustibles || '';
   document.getElementById('d-otrosMateriales').value = d.otrosMateriales || '';
+  document.getElementById('d-visitaCompleta').value = d.visitaCompleta || '';
   document.getElementById('d-noAccesibles').value = d.noAccesibles || '';
+  document.getElementById('wrap-noAccesibles').style.display = d.visitaCompleta === 'No' ? 'block' : 'none';
   document.getElementById('d-obsPendientes').value = d.obsPendientes || '';
   renderSectoresEst();
   renderPreviewParrafosPaso2();
@@ -796,13 +797,11 @@ function hidratarTodo() {
   const s = state.sintesis;
   if (!Array.isArray(s.acciones)) s.acciones = [];
   if (!Array.isArray(s.secundarias)) s.secundarias = [];
-  if (!Array.isArray(s.pendientes)) s.pendientes = [];
   ensureRegistrosTareas();
 
   document.getElementById('s-obj1').value = s.obj1 || '';
   document.getElementById('s-obj2').value = s.obj2 || '';
   document.getElementById('s-otroAccion').value = s.otroAccion || '';
-  document.getElementById('s-pendNota').value = s.pendNota || '';
   document.getElementById('s-docEntregada').value = s.docEntregada || '';
 
   document.getElementById('chk-acciones').innerHTML = ACCIONES_LIST.map(a => `
@@ -819,12 +818,6 @@ function hidratarTodo() {
       </label>
     `).join('');
   }
-
-  document.getElementById('chk-pendientes').innerHTML = PENDIENTES_LIST.map(p => `
-    <label class="chk-item">
-      <input type="checkbox" ${s.pendientes.includes(p) ? 'checked' : ''} onchange="toggleChk('pendientes', '${escA(p)}', this.checked)"> ${esc(p)}
-    </label>
-  `).join('');
 
   document.getElementById('chk-sinDesviosFoto').checked = !!state.sinDesviosFoto;
   document.getElementById('c-segIntro').value = state.seguimientoIntro || '';
@@ -868,11 +861,27 @@ function syncPaso1() {
 function calcCategoriaPlan() {
   const sup = parseFloat(document.getElementById('d-superficie').value);
   const esp = document.getElementById('d-riesgoEspecial').checked;
-  if (isNaN(sup) || sup <= 0) return;
+  const selCat = document.getElementById('f-categoria');
+  if (isNaN(sup) || sup <= 0) {
+    if (selCat) selCat.value = '';
+    state.caratula.categoria = '';
+    return;
+  }
   let cat = sup > 10000 ? 'AA' : (sup >= 2501 ? 'A' : (sup >= 501 ? 'B' : 'C'));
   if (esp) cat = cat === 'C' ? 'B' : (cat === 'B' ? 'A' : 'AA');
-  document.getElementById('f-categoria').value = cat;
+  if (selCat) selCat.value = cat;
   state.caratula.categoria = cat;
+}
+
+function alCambiarVisitaCompleta() {
+  const v = document.getElementById('d-visitaCompleta').value;
+  const wrap = document.getElementById('wrap-noAccesibles');
+  if (wrap) wrap.style.display = v === 'No' ? 'block' : 'none';
+  if (v === 'Sí') {
+    const na = document.getElementById('d-noAccesibles');
+    if (na) na.classList.remove('invalid');
+  }
+  syncPaso2();
 }
 
 function syncPaso2() {
@@ -888,22 +897,20 @@ function syncPaso2() {
   d.riesgoEspecial = document.getElementById('d-riesgoEspecial').checked;
   d.cantTrabajadores = document.getElementById('d-cantTrabajadores').value;
   d.desglosePersonal = document.getElementById('d-desglosePersonal').value;
-  d.ocupacionPublico = document.getElementById('d-ocupacionPublico').value;
-  d.eventos = document.getElementById('d-eventos').value;
   d.tercerizados = document.getElementById('d-tercerizados').value;
   d.procesos = document.getElementById('d-procesos').value;
   d.mantenimiento = document.getElementById('d-mantenimiento').value;
   d.quimicos = document.getElementById('d-quimicos').value;
   d.combustibles = document.getElementById('d-combustibles').value;
   d.otrosMateriales = document.getElementById('d-otrosMateriales').value;
+  d.visitaCompleta = document.getElementById('d-visitaCompleta').value;
   d.noAccesibles = document.getElementById('d-noAccesibles').value;
   d.obsPendientes = document.getElementById('d-obsPendientes').value;
 
-  state.caratula.categoria = document.getElementById('f-categoria').value;
+  calcCategoriaPlan();
   state.sintesis.obj1 = document.getElementById('s-obj1').value;
   state.sintesis.obj2 = document.getElementById('s-obj2').value;
   state.sintesis.otroAccion = document.getElementById('s-otroAccion').value;
-  state.sintesis.pendNota = document.getElementById('s-pendNota').value;
   state.sintesis.docEntregada = document.getElementById('s-docEntregada').value;
   renderPreviewParrafosPaso2();
   save();
@@ -957,17 +964,15 @@ function construirParrafosDescripcion() {
   }
   if (edPartes.length) out.push({ titulo: 'Edificio', texto: edPartes.map(cerrarPunto).join(' ') });
 
-  // 3. Personal y ocupación
+  // 3. Personal
   const perPartes = [];
   if (d.cantTrabajadores || d.desglosePersonal.trim()) {
     let pt = d.cantTrabajadores ? `${d.cantTrabajadores} trabajadores` : 'Personal';
     if (d.desglosePersonal.trim()) pt += ` (${d.desglosePersonal.trim()})`;
     perPartes.push(pt);
   }
-  if (d.ocupacionPublico.trim()) perPartes.push(d.ocupacionPublico.trim());
-  if (d.eventos.trim()) perPartes.push(d.eventos.trim());
   if (d.tercerizados.trim()) perPartes.push(d.tercerizados.trim());
-  if (perPartes.length) out.push({ titulo: 'Personal y ocupación', texto: perPartes.map(cerrarPunto).join(' ') });
+  if (perPartes.length) out.push({ titulo: 'Personal', texto: perPartes.map(cerrarPunto).join(' ') });
 
   // 4. Procesos y actividades
   const procPartes = [];
@@ -979,8 +984,11 @@ function construirParrafosDescripcion() {
   const matPartes = [d.quimicos.trim(), d.combustibles.trim(), d.otrosMateriales.trim()].filter(Boolean);
   if (matPartes.length) out.push({ titulo: 'Materiales y sustancias', texto: cerrarPunto(matPartes.join('; ')) });
 
-  // 6. Observaciones
-  const obsPartes = [d.noAccesibles.trim(), d.obsPendientes.trim()].filter(Boolean);
+  // 6. Observaciones y alcance de la recorrida
+  const obsPartes = [];
+  if (d.visitaCompleta === 'Sí') obsPartes.push('Se recorrieron la totalidad de los pisos y sectores del establecimiento');
+  if (d.visitaCompleta === 'No' && d.noAccesibles.trim()) obsPartes.push('Sectores/pisos no visitados: ' + d.noAccesibles.trim());
+  if (d.obsPendientes.trim()) obsPartes.push(d.obsPendientes.trim());
   if (obsPartes.length) out.push({ titulo: 'Observaciones', texto: obsPartes.map(cerrarPunto).join(' ') });
 
   return out;
@@ -1012,7 +1020,7 @@ async function pulirDescripcionConIA() {
   avisar('Puliendo redacción de la descripción del establecimiento con IA...', 'info');
   const prompt = `Reescribí únicamente para mejorar fluidez, concordancia y estilo técnico-profesional los siguientes 6 párrafos de descripción de un establecimiento para un Informe de Higiene y Seguridad en Argentina.
 REGLAS ESTRICTAS:
-1. Conservá exactamente los encabezados "Actividad:", "Edificio:", "Personal y ocupación:", "Procesos y actividades:", "Materiales y sustancias:" y "Observaciones:" (solo incluí los que tengan datos).
+1. Conservá exactamente los encabezados "Actividad:", "Edificio:", "Personal:", "Procesos y actividades:", "Materiales y sustancias:" y "Observaciones:" (solo incluí los que tengan datos).
 2. NO inventes ni agregues ningún número, dato, sector ni supuesto que no esté en el borrador.
 3. Devolvé texto plano separado por línea en blanco entre párrafos, sin markdown ni viñetas.
 
@@ -1134,8 +1142,8 @@ function renderSectoresEst() {
   tb.innerHTML = state.descripcion.sectores.map((s, i) => `
     <tr>
       <td><input class="${!s.piso.trim() ? 'invalid' : ''}" value="${escA(s.piso)}" placeholder="Ej: PB / Piso 1" oninput="state.descripcion.sectores[${i}].piso=this.value;this.classList.toggle('invalid',!this.value.trim());actualizarDatalistSectores();renderPreviewParrafosPaso2();save()"></td>
-      <td><input class="${!s.nombre.trim() ? 'invalid' : ''}" value="${escA(s.nombre)}" placeholder="Ej: Aulas / Oficina de guardia / Cocina" oninput="state.descripcion.sectores[${i}].nombre=this.value;this.classList.toggle('invalid',!this.value.trim());actualizarDatalistSectores();renderPreviewParrafosPaso2();save()"></td>
-      <td><input class="${!s.actividad.trim() ? 'invalid' : ''}" value="${escA(s.actividad)}" placeholder="Ej: Dictado de clases / Atención al público" oninput="state.descripcion.sectores[${i}].actividad=this.value;this.classList.toggle('invalid',!this.value.trim());renderPreviewParrafosPaso2();save()"></td>
+      <td><input class="${!s.nombre.trim() ? 'invalid' : ''}" value="${escA(s.nombre)}" placeholder="Ej: Guardia / Consultorios / Laboratorio" oninput="state.descripcion.sectores[${i}].nombre=this.value;this.classList.toggle('invalid',!this.value.trim());actualizarDatalistSectores();renderPreviewParrafosPaso2();save()"></td>
+      <td><input class="${!s.actividad.trim() ? 'invalid' : ''}" value="${escA(s.actividad)}" placeholder="Ej: Atención de emergencias / Diagnóstico" oninput="state.descripcion.sectores[${i}].actividad=this.value;this.classList.toggle('invalid',!this.value.trim());renderPreviewParrafosPaso2();save()"></td>
       <td><input value="${escA(s.sup)}" placeholder="m²" oninput="state.descripcion.sectores[${i}].sup=this.value;renderPreviewParrafosPaso2();save()"></td>
       <td><button class="btn btn-danger-outline btn-sm edit-only" onclick="delSectorEst(${i})">×</button></td>
     </tr>
@@ -1491,8 +1499,8 @@ function renderHallazgos() {
 // ================================================================
 // PASO 4: AUTOCOMPLETADO Y RENDER DE LISTA DE VERIFICACIÓN A1–E8
 // ================================================================
-function autocompletarChecklistDesdeFotosYPendientes() {
-  // 1. Desde hallazgos fotográficos del Paso 3
+function autocompletarChecklistDesdeFotos() {
+  // Desde hallazgos fotográficos del Paso 3
   state.hallazgos.forEach(h => {
     const ids = String(h.ids || '').split(/[\s,]+/).filter(Boolean);
     ids.forEach(id => {
@@ -1503,19 +1511,6 @@ function autocompletarChecklistDesdeFotosYPendientes() {
           state.checklist[id].obs = txt.slice(0, 220);
           state.checklist[id].auto = true;
         }
-      }
-    });
-  });
-
-  // 2. Desde estudios pendientes tildados en Paso 2
-  (state.sintesis.pendientes || []).forEach(pName => {
-    const map = PENDIENTE_A_IDS[pName];
-    if (!map) return;
-    map.ids.forEach(id => {
-      if (state.checklist[id] && !state.checklist[id].estado) {
-        state.checklist[id].estado = 'NC';
-        state.checklist[id].obs = map.nota;
-        state.checklist[id].auto = true;
       }
     });
   });
@@ -1983,7 +1978,7 @@ async function redactarConclusionIA() {
   const prompt = `Redactá la sección "6. Conclusión y prioridades" de un Informe de Visita Técnica de Higiene y Seguridad (4 a 6 párrafos sobrios, sin viñetas ni markdown, texto plano para recuadro oficial).
 Establecimiento: ${state.caratula.denominacion} (Est. N° ${state.caratula.estNro}), Fecha: ${fmtFechaAR(state.caratula.fechaVisita)}.
 Actividad: ${state.descripcion.actividadGeneral} (${state.descripcion.superficie} m², ${state.descripcion.pisos} piso(s)).
-Estudios pendientes: ${state.sintesis.pendientes.join(', ') || 'Ninguno'}.
+Recorrida completa de pisos/sectores: ${state.descripcion.visitaCompleta || 'Sí'}${state.descripcion.visitaCompleta === 'No' && state.descripcion.noAccesibles ? ' (' + state.descripcion.noAccesibles + ')' : ''}.
 Ítems NC/OBS:
 ${ncs || 'Ninguno'}
 Hallazgos:
@@ -2352,7 +2347,6 @@ function renderPreview() {
   const secItems = TAREAS_SECUNDARIAS_LIST.filter(t => secList.includes(t)).map(t => '☒ ' + esc(t));
   if (s.otroAccion && s.otroAccion.trim()) secItems.push('☒ Otro: ' + esc(s.otroAccion.trim()));
   const secHtml = secItems.length ? secItems.join(' &nbsp; ') : 'Ninguna registrada en esta visita.';
-  const penHtml = PENDIENTES_LIST.map(p => ((s.pendientes || []).includes(p) ? '☒ ' : '☐ ') + esc(p)).join(' &nbsp; ') + (s.pendNota ? '<br>' + esc(s.pendNota) : '');
   const descParrafosHtml = construirParrafosDescripcion()
     .map(p => `<p style="margin-bottom:6px;text-align:justify;">${p.titulo ? `<strong>${esc(p.titulo)}:</strong> ` : ''}${esc(p.texto)}</p>`)
     .join('');
@@ -2375,8 +2369,7 @@ function renderPreview() {
             <tr><td class="pdf-lbl">Categoría y ciclo de visita</td><td>Categoría ${esc(c.categoria)} · ${esc(c.visitaNro)}</td></tr>
             <tr><td class="pdf-lbl">Acciones realizadas (Plan HyS 2026)</td><td>${accHtml}</td></tr>
             <tr><td class="pdf-lbl">Tareas secundarias y mediciones</td><td>${secHtml}</td></tr>
-            <tr><td class="pdf-lbl">Estudios y documentos pendientes</td><td>${penHtml}</td></tr>
-            <tr><td class="pdf-lbl">Documentación entregada al establecimiento</td><td>${esc(s.docEntregada)}</td></tr>
+            <tr><td class="pdf-lbl">Documentación entregada al establecimiento</td><td>${esc(s.docEntregada || 'Constancia de visita.')}</td></tr>
           </tbody>
         </table>
       </div>

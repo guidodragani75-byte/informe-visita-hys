@@ -16,15 +16,40 @@ function cleanDomicilio(s) {
     .trim();
 }
 
+const IAPSER_CUIT_FALLBACK = {
+  'JEFATURA DE POLICIA DE LA PROVINCIA DE ENTRE RIOS': '30-67119808-1',
+  'MINISTERIO DE SALUD DE LA PROVINCIA DE ENTRE RIOS': '30-67119808-1',
+  'MINISTERIO DE GOBIERNO Y TRABAJO DE LA PROVINCIA DE ENTRE RÍOS': '30-67119808-1',
+  'DIRECCION DE ADMINISTRACION SECRETARIA DE ENERGIA DE E.RIOS': '30-67119808-1',
+  'UNIVERSIDAD AUTÓNOMA DE ENTRE RÍOS': '30-70755845-1',
+  'ADMINISTRADORA TRIBUTARIA DE LA PROVINCIA DE ENTRE RÍOS': '30-71171714-3',
+  'CAJA DE JUBILACIONES Y PENSIONES DE ENTRE RIOS': '30-65392098-9',
+  'TRIBUNAL DE CUENTAS DE ENTRE RIOS': '30-67610996-6',
+  'INSTITUTO DE CONTROL DE ALIMENTACION Y BROMATOLOGIA': '30-71239854-8',
+  'ENTE DE PROMOCION DE LA PRODUCCION Y EL EMPLEO DE URDINARRAIN': '30-70838186-5'
+};
+
 function getCatalogoIapser() {
   const cache = CacheService.getScriptCache();
-  const cached = cache.get('iapser_catalog_v1');
+  const cached = cache.get('iapser_catalog_v2');
   if (cached) {
     try { return JSON.parse(cached); } catch (e) {}
   }
   const ssIapser = SpreadsheetApp.openById(IAPSER_SPREADSHEET_ID);
   const estRows = readSheetObjects(ssIapser, 'Establecimientos');
   const supRows = readSheetObjects(ssIapser, 'Superficie_Establecimientos');
+
+  // Leer CUITs cargados dinámicamente en la pestaña Datos de Informes IAPSER
+  const cuitMap = Object.assign({}, IAPSER_CUIT_FALLBACK);
+  const shDatos = ssIapser.getSheetByName('Datos');
+  if (shDatos && shDatos.getLastRow() >= 1) {
+    const dVals = shDatos.getRange(1, 1, shDatos.getLastRow(), Math.min(12, shDatos.getLastColumn())).getValues();
+    dVals.forEach(row => {
+      const o = String(row[2] || '').trim().toUpperCase();
+      const ct = String(row[9] || '').trim();
+      if (o && /^\d{2}-\d{8}-\d$/.test(ct)) cuitMap[o] = ct;
+    });
+  }
 
   const supMap = {};
   supRows.forEach(r => {
@@ -37,7 +62,8 @@ function getCatalogoIapser() {
     const org = String(r['Organismo'] || '').trim();
     if (!org) return;
     const nro = String(r['NRO.ESTAB.'] || '').trim();
-    const sRow = supMap[org.toUpperCase() + '|' + nro] || supRows[idx] || {};
+    const orgUpper = org.toUpperCase();
+    const sRow = supMap[orgUpper + '|' + nro] || supRows[idx] || {};
     const dom = cleanDomicilio(sRow['Domicilio'] || r['DOMICILIO'] || '');
     const loc = String(sRow['Localidad'] || r['LOCALIDAD'] || '').trim();
     let prov = String(r['PROVINCIA'] || 'Entre Ríos').trim();
@@ -45,9 +71,11 @@ function getCatalogoIapser() {
     const nom = String(r['Nombre_establecimiento'] || '').trim();
     const supRaw = String(sRow['Superficie Cubierta (m²)'] || '').trim();
     const sup = supRaw ? supRaw.replace(/[^\d.,]/g, '').replace(',', '.') : '';
+    const cuit = String(r['CUIT'] || cuitMap[orgUpper] || '').trim();
     items.push({
       id: String(r['ID_EST.EMPRESA'] || (idx + 1)).trim(),
       org: org,
+      cuit: cuit,
       nro: nro,
       nom: nom,
       dom: dom,
@@ -59,7 +87,7 @@ function getCatalogoIapser() {
 
   try {
     const str = JSON.stringify(items);
-    if (str.length < 95000) cache.put('iapser_catalog_v1', str, 600);
+    if (str.length < 95000) cache.put('iapser_catalog_v2', str, 600);
   } catch (e) {}
   return items;
 }
