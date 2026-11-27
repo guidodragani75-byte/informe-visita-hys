@@ -1399,6 +1399,10 @@ function save() {
       slim.caratula.coverPhoto = '';
       slim.caratula.firmaImg = '';
       slim.hallazgos = slim.hallazgos.map(h => ({ ...h, photos: (h.photos || []).map(p => ({ ...p, dataUrl: '' })) }));
+      (slim.anexos?.evac?.salidas || []).forEach(x => { x.fotoDataUrl = ''; });
+      (slim.anexos?.evac?.elementos || []).forEach(x => { x.fotoDataUrl = ''; });
+      (slim.anexos?.fuego?.extintores || []).forEach(x => { x.fotoDataUrl = ''; });
+      (slim.anexos?.fuego?.hidrantes || []).forEach(x => { x.fotoDataUrl = ''; });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
     } catch (_) {}
   }
@@ -3192,9 +3196,9 @@ function renderRegistrosTareas() {
   cont.innerHTML = blocks.join('');
 }
 
-// ANEXOS OPCIONALES (PLANILLA 1 y 2)
+// ANEXOS OPCIONALES / OBLIGATORIOS (PLANILLA 1 y 2)
 function addEvacSector() { state.anexos.evac.sectores.push({ sector:'', sup:'', manana:'', tarde:'', noche:'', movRed:'No', obs:'' }); renderAnexos(); save(); }
-function addEvacSalida() { state.anexos.evac.salidas.push({ ubicacion:'', tipo:'Puerta', ancho:'', apertura:'Hacia afuera', libre:'Sí', senalizada:'Sí', foto:'' }); renderAnexos(); save(); }
+function addEvacSalida() { state.anexos.evac.salidas.push({ ubicacion:'', tipo:'Puerta', ancho:'', apertura:'Hacia afuera', libre:'Sí', senalizada:'Sí', foto:'', fotoDataUrl:'', fotoDriveId:'', fotoUrl:'' }); renderAnexos(); save(); }
 function syncEvacPlano() {
   state.anexos.evac.plano = {
     existe: document.getElementById('ev-pl-ex').value,
@@ -3204,8 +3208,57 @@ function syncEvacPlano() {
   };
   save();
 }
-function addExt() { state.anexos.fuego.extintores.push({ ubicacion:'', agente:'ABC 5 kg', vencCarga:'', vencPH:'', estadoVisual:'✓', acceso:'✓', desvio:'No', foto:'' }); renderAnexos(); save(); }
-function addHid() { state.anexos.fuego.hidrantes.push({ ubicacion:'', gabinete:'✓', manguera:'✓', lanza:'✓', llave:'✓', acceso:'✓', desvio:'No', foto:'' }); renderAnexos(); save(); }
+function addExt() { state.anexos.fuego.extintores.push({ ubicacion:'', agente:'ABC 5 kg', vencCarga:'', vencPH:'', estadoVisual:'✓', acceso:'✓', desvio:'No', foto:'', fotoDataUrl:'', fotoDriveId:'', fotoUrl:'' }); renderAnexos(); save(); }
+function addHid() { state.anexos.fuego.hidrantes.push({ ubicacion:'', gabinete:'✓', manguera:'✓', lanza:'✓', llave:'✓', acceso:'✓', desvio:'No', foto:'', fotoDataUrl:'', fotoDriveId:'', fotoUrl:'' }); renderAnexos(); save(); }
+
+function getListaAnexoPorTipo(tipo) {
+  if (tipo === 'salida') return state.anexos.evac.salidas;
+  if (tipo === 'elem') return state.anexos.evac.elementos;
+  if (tipo === 'ext') return state.anexos.fuego.extintores;
+  if (tipo === 'hid') return state.anexos.fuego.hidrantes;
+  return null;
+}
+
+async function subirFotoAnexo(tipo, idx, ev) {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  const list = getListaAnexoPorTipo(tipo);
+  if (!file || !list || !list[idx]) return;
+  try {
+    const raw = await fileToBase64(file);
+    list[idx].fotoDataUrl = await prepararImagen(raw, 1200);
+    list[idx].fotoDriveId = '';
+    list[idx].fotoUrl = '';
+    if (!list[idx].foto) list[idx].foto = `Foto ${idx + 1}`;
+    renderAnexos();
+    save();
+  } catch (err) {
+    avisar('No se pudo cargar la foto en la planilla: ' + esc(err?.message || 'formato inválido'), 'err');
+  }
+}
+
+function quitarFotoAnexo(tipo, idx) {
+  const list = getListaAnexoPorTipo(tipo);
+  if (!list || !list[idx]) return;
+  list[idx].fotoDataUrl = '';
+  list[idx].fotoDriveId = '';
+  list[idx].fotoUrl = '';
+  list[idx].foto = '';
+  renderAnexos();
+  save();
+}
+
+function renderCeldaFotoAnexo(tipo, idx, item) {
+  const inputId = `anx-f-${tipo}-${idx}`;
+  const thumb = item.fotoDataUrl
+    ? `<div style="display:flex; align-items:center; gap:5px; justify-content:center;">
+         <img src="${item.fotoDataUrl}" alt="Foto" style="width:40px; height:30px; object-fit:cover; border:1px solid #cbd5e1; border-radius:3px;">
+         <button type="button" class="btn btn-white btn-sm edit-only" style="padding:2px 6px;" title="Cambiar foto" onclick="document.getElementById('${inputId}').click()">↻</button>
+         <button type="button" class="btn btn-danger-outline btn-sm edit-only" style="padding:2px 6px;" title="Quitar foto" onclick="quitarFotoAnexo('${tipo}', ${idx})">×</button>
+       </div>`
+    : `<button type="button" class="btn btn-white btn-sm edit-only" style="width:100%; justify-content:center;" onclick="document.getElementById('${inputId}').click()">Subir foto</button>`;
+  return `${thumb}<input type="file" id="${inputId}" accept="image/*" style="position:fixed; left:-9999px; width:1px; height:1px; opacity:0;" onchange="subirFotoAnexo('${tipo}', ${idx}, event)">`;
+}
 
 function renderAnexos() {
   document.getElementById('wrap-anexo-evac').style.display = state.anexos.evacEstado === 'Completado' ? 'block' : 'none';
@@ -3217,18 +3270,18 @@ function renderAnexos() {
     : '<tr><td colspan="8" style="text-align:center;color:var(--muted);">Sin registros</td></tr>';
 
   document.getElementById('tb-ev-sal').innerHTML = ev.salidas.length
-    ? ev.salidas.map((s,i) => `<tr><td style="text-align:center;">${i+1}</td><td><input value="${escA(s.ubicacion)}" oninput="state.anexos.evac.salidas[${i}].ubicacion=this.value;save()"></td><td><select onchange="state.anexos.evac.salidas[${i}].tipo=this.value;save()"><option ${s.tipo==='Puerta'?'selected':''}>Puerta</option><option ${s.tipo==='Escalera'?'selected':''}>Escalera</option><option ${s.tipo==='Pasillo'?'selected':''}>Pasillo</option></select></td><td><input value="${escA(s.ancho)}" oninput="state.anexos.evac.salidas[${i}].ancho=this.value;save()"></td><td><input value="${escA(s.apertura)}" oninput="state.anexos.evac.salidas[${i}].apertura=this.value;save()"></td><td><select onchange="state.anexos.evac.salidas[${i}].libre=this.value;save()"><option ${s.libre==='Sí'?'selected':''}>Sí</option><option ${s.libre==='No'?'selected':''}>No</option></select></td><td><select onchange="state.anexos.evac.salidas[${i}].senalizada=this.value;save()"><option ${s.senalizada==='Sí'?'selected':''}>Sí</option><option ${s.senalizada==='No'?'selected':''}>No</option></select></td><td><input value="${escA(s.foto)}" oninput="state.anexos.evac.salidas[${i}].foto=this.value;save()"></td><td><button class="btn btn-danger-outline btn-sm edit-only" onclick="state.anexos.evac.salidas.splice(${i},1);renderAnexos();save()">×</button></td></tr>`).join('')
+    ? ev.salidas.map((s,i) => `<tr><td style="text-align:center;">${i+1}</td><td><input value="${escA(s.ubicacion)}" oninput="state.anexos.evac.salidas[${i}].ubicacion=this.value;save()"></td><td><select onchange="state.anexos.evac.salidas[${i}].tipo=this.value;save()"><option ${s.tipo==='Puerta'?'selected':''}>Puerta</option><option ${s.tipo==='Escalera'?'selected':''}>Escalera</option><option ${s.tipo==='Pasillo'?'selected':''}>Pasillo</option></select></td><td><input value="${escA(s.ancho)}" oninput="state.anexos.evac.salidas[${i}].ancho=this.value;save()"></td><td><input value="${escA(s.apertura)}" oninput="state.anexos.evac.salidas[${i}].apertura=this.value;save()"></td><td><select onchange="state.anexos.evac.salidas[${i}].libre=this.value;save()"><option ${s.libre==='Sí'?'selected':''}>Sí</option><option ${s.libre==='No'?'selected':''}>No</option></select></td><td><select onchange="state.anexos.evac.salidas[${i}].senalizada=this.value;save()"><option ${s.senalizada==='Sí'?'selected':''}>Sí</option><option ${s.senalizada==='No'?'selected':''}>No</option></select></td><td style="min-width:96px;text-align:center;">${renderCeldaFotoAnexo('salida', i, s)}</td><td><button class="btn btn-danger-outline btn-sm edit-only" onclick="state.anexos.evac.salidas.splice(${i},1);renderAnexos();save()">×</button></td></tr>`).join('')
     : '<tr><td colspan="9" style="text-align:center;color:var(--muted);">Sin registros</td></tr>';
 
-  document.getElementById('tb-ev-elem').innerHTML = ev.elementos.map((el,i) => `<tr><td style="font-weight:600;">${el.nombre}</td><td><select onchange="state.anexos.evac.elementos[${i}].existe=this.value;save()"><option value="">--</option><option ${el.existe==='Sí'?'selected':''}>Sí</option><option ${el.existe==='No'?'selected':''}>No</option></select></td><td><input value="${escA(el.cantidad)}" oninput="state.anexos.evac.elementos[${i}].cantidad=this.value;save()"></td><td><input value="${escA(el.ubicacion)}" oninput="state.anexos.evac.elementos[${i}].ubicacion=this.value;save()"></td><td><input value="${escA(el.estado)}" oninput="state.anexos.evac.elementos[${i}].estado=this.value;save()"></td><td><input value="${escA(el.foto)}" oninput="state.anexos.evac.elementos[${i}].foto=this.value;save()"></td></tr>`).join('');
+  document.getElementById('tb-ev-elem').innerHTML = ev.elementos.map((el,i) => `<tr><td style="font-weight:600;">${el.nombre}</td><td><select onchange="state.anexos.evac.elementos[${i}].existe=this.value;save()"><option value="">--</option><option ${el.existe==='Sí'?'selected':''}>Sí</option><option ${el.existe==='No'?'selected':''}>No</option></select></td><td><input value="${escA(el.cantidad)}" oninput="state.anexos.evac.elementos[${i}].cantidad=this.value;save()"></td><td><input value="${escA(el.ubicacion)}" oninput="state.anexos.evac.elementos[${i}].ubicacion=this.value;save()"></td><td><input value="${escA(el.estado)}" oninput="state.anexos.evac.elementos[${i}].estado=this.value;save()"></td><td style="min-width:96px;text-align:center;">${renderCeldaFotoAnexo('elem', i, el)}</td></tr>`).join('');
 
   const fg = state.anexos.fuego;
   document.getElementById('tb-ext').innerHTML = fg.extintores.length
-    ? fg.extintores.map((e,i) => `<tr><td style="text-align:center;">${i+1}</td><td><input class="${!e.ubicacion.trim()?'invalid':''}" value="${escA(e.ubicacion)}" placeholder="Ubicación obligatoria" oninput="state.anexos.fuego.extintores[${i}].ubicacion=this.value;this.classList.toggle('invalid',!this.value.trim());save()"></td><td><input value="${escA(e.agente)}" oninput="state.anexos.fuego.extintores[${i}].agente=this.value;save()"></td><td><input value="${escA(e.vencCarga)}" oninput="state.anexos.fuego.extintores[${i}].vencCarga=this.value;save()"></td><td><input value="${escA(e.vencPH)}" oninput="state.anexos.fuego.extintores[${i}].vencPH=this.value;save()"></td><td><select onchange="state.anexos.fuego.extintores[${i}].estadoVisual=this.value;save()"><option ${e.estadoVisual==='✓'?'selected':''}>✓</option><option ${e.estadoVisual==='✗'?'selected':''}>✗</option></select></td><td><select onchange="state.anexos.fuego.extintores[${i}].acceso=this.value;save()"><option ${e.acceso==='✓'?'selected':''}>✓</option><option ${e.acceso==='✗'?'selected':''}>✗</option></select></td><td><select onchange="state.anexos.fuego.extintores[${i}].desvio=this.value;save()"><option ${e.desvio==='No'?'selected':''}>No</option><option ${e.desvio==='Sí'?'selected':''}>Sí</option></select></td><td><input value="${escA(e.foto)}" oninput="state.anexos.fuego.extintores[${i}].foto=this.value;save()"></td><td><button class="btn btn-danger-outline btn-sm edit-only" onclick="state.anexos.fuego.extintores.splice(${i},1);renderAnexos();save()">×</button></td></tr>`).join('')
+    ? fg.extintores.map((e,i) => `<tr><td style="text-align:center;">${i+1}</td><td><input class="${!e.ubicacion.trim()?'invalid':''}" value="${escA(e.ubicacion)}" placeholder="Ubicación obligatoria" oninput="state.anexos.fuego.extintores[${i}].ubicacion=this.value;this.classList.toggle('invalid',!this.value.trim());save()"></td><td><input value="${escA(e.agente)}" oninput="state.anexos.fuego.extintores[${i}].agente=this.value;save()"></td><td><input value="${escA(e.vencCarga)}" oninput="state.anexos.fuego.extintores[${i}].vencCarga=this.value;save()"></td><td><input value="${escA(e.vencPH)}" oninput="state.anexos.fuego.extintores[${i}].vencPH=this.value;save()"></td><td><select onchange="state.anexos.fuego.extintores[${i}].estadoVisual=this.value;save()"><option ${e.estadoVisual==='✓'?'selected':''}>✓</option><option ${e.estadoVisual==='✗'?'selected':''}>✗</option></select></td><td><select onchange="state.anexos.fuego.extintores[${i}].acceso=this.value;save()"><option ${e.acceso==='✓'?'selected':''}>✓</option><option ${e.acceso==='✗'?'selected':''}>✗</option></select></td><td><select onchange="state.anexos.fuego.extintores[${i}].desvio=this.value;save()"><option ${e.desvio==='No'?'selected':''}>No</option><option ${e.desvio==='Sí'?'selected':''}>Sí</option></select></td><td style="min-width:96px;text-align:center;">${renderCeldaFotoAnexo('ext', i, e)}</td><td><button class="btn btn-danger-outline btn-sm edit-only" onclick="state.anexos.fuego.extintores.splice(${i},1);renderAnexos();save()">×</button></td></tr>`).join('')
     : '<tr><td colspan="10" style="text-align:center;color:var(--muted);">Sin registros</td></tr>';
 
   document.getElementById('tb-hid').innerHTML = fg.hidrantes.length
-    ? fg.hidrantes.map((h,i) => `<tr><td style="text-align:center;">${i+1}</td><td><input class="${!h.ubicacion.trim()?'invalid':''}" value="${escA(h.ubicacion)}" placeholder="Ubicación obligatoria" oninput="state.anexos.fuego.hidrantes[${i}].ubicacion=this.value;this.classList.toggle('invalid',!this.value.trim());save()"></td>${['gabinete','manguera','lanza','llave','acceso'].map(k=>`<td><select onchange="state.anexos.fuego.hidrantes[${i}].${k}=this.value;save()"><option ${h[k]==='✓'?'selected':''}>✓</option><option ${h[k]==='✗'?'selected':''}>✗</option></select></td>`).join('')}<td><select onchange="state.anexos.fuego.hidrantes[${i}].desvio=this.value;save()"><option ${h.desvio==='No'?'selected':''}>No</option><option ${h.desvio==='Sí'?'selected':''}>Sí</option></select></td><td><input value="${escA(h.foto)}" oninput="state.anexos.fuego.hidrantes[${i}].foto=this.value;save()"></td><td><button class="btn btn-danger-outline btn-sm edit-only" onclick="state.anexos.fuego.hidrantes.splice(${i},1);renderAnexos();save()">×</button></td></tr>`).join('')
+    ? fg.hidrantes.map((h,i) => `<tr><td style="text-align:center;">${i+1}</td><td><input class="${!h.ubicacion.trim()?'invalid':''}" value="${escA(h.ubicacion)}" placeholder="Ubicación obligatoria" oninput="state.anexos.fuego.hidrantes[${i}].ubicacion=this.value;this.classList.toggle('invalid',!this.value.trim());save()"></td>${['gabinete','manguera','lanza','llave','acceso'].map(k=>`<td><select onchange="state.anexos.fuego.hidrantes[${i}].${k}=this.value;save()"><option ${h[k]==='✓'?'selected':''}>✓</option><option ${h[k]==='✗'?'selected':''}>✗</option></select></td>`).join('')}<td><select onchange="state.anexos.fuego.hidrantes[${i}].desvio=this.value;save()"><option ${h.desvio==='No'?'selected':''}>No</option><option ${h.desvio==='Sí'?'selected':''}>Sí</option></select></td><td style="min-width:96px;text-align:center;">${renderCeldaFotoAnexo('hid', i, h)}</td><td><button class="btn btn-danger-outline btn-sm edit-only" onclick="state.anexos.fuego.hidrantes.splice(${i},1);renderAnexos();save()">×</button></td></tr>`).join('')
     : '<tr><td colspan="10" style="text-align:center;color:var(--muted);">Sin registros</td></tr>';
 }
 
@@ -3751,6 +3804,10 @@ function renderPreview() {
   `);
 
   // ANEXOS OPCIONALES (SOLO SI COMPLETADOS)
+  const pdfFotoCell = (x) => x.fotoDataUrl
+    ? `<img src="${x.fotoDataUrl}" alt="Foto" style="max-width:24mm; max-height:16mm; object-fit:cover; border:1px solid #cbd5e1; display:block; margin:0 auto;">`
+    : esc(x.foto || '-');
+
   if (state.anexos.evacEstado === 'Completado') {
     const ev = state.anexos.evac;
     pages.push(`
@@ -3762,10 +3819,10 @@ function renderPreview() {
             <tbody>${ev.sectores.length ? ev.sectores.map(x=>`<tr><td>${esc(x.sector)}</td><td>${esc(x.sup)}</td><td>${esc(x.manana)}</td><td>${esc(x.tarde)}</td><td>${esc(x.noche)}</td><td>${esc(x.movRed)}</td><td>${esc(x.obs)}</td></tr>`).join('') : '<tr><td colspan="7">Sin datos</td></tr>'}</tbody></table>
           <div class="pdf-subcat">B. Medios de salida</div>
           <table class="pdf-table"><thead><tr><th>N°</th><th>Ubicación</th><th>Tipo</th><th>Ancho</th><th>Apertura</th><th>Libre</th><th>Señal.</th><th>Foto</th></tr></thead>
-            <tbody>${ev.salidas.length ? ev.salidas.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.ubicacion)}</td><td>${esc(x.tipo)}</td><td>${esc(x.ancho)}</td><td>${esc(x.apertura)}</td><td>${esc(x.libre)}</td><td>${esc(x.senalizada)}</td><td>${esc(x.foto)}</td></tr>`).join('') : '<tr><td colspan="8">Sin datos</td></tr>'}</tbody></table>
+            <tbody>${ev.salidas.length ? ev.salidas.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.ubicacion)}</td><td>${esc(x.tipo)}</td><td>${esc(x.ancho)}</td><td>${esc(x.apertura)}</td><td>${esc(x.libre)}</td><td>${esc(x.senalizada)}</td><td style="text-align:center;">${pdfFotoCell(x)}</td></tr>`).join('') : '<tr><td colspan="8">Sin datos</td></tr>'}</tbody></table>
           <div class="pdf-subcat">C. Elementos de emergencia</div>
           <table class="pdf-table"><thead><tr><th>Elemento</th><th>Existe</th><th>Cant.</th><th>Ubicación</th><th>Estado</th><th>Foto</th></tr></thead>
-            <tbody>${ev.elementos.map(el=>`<tr><td>${el.nombre}</td><td>${esc(el.existe||'-')}</td><td>${esc(el.cantidad||'-')}</td><td>${esc(el.ubicacion||'-')}</td><td>${esc(el.estado||'-')}</td><td>${esc(el.foto||'-')}</td></tr>`).join('')}</tbody></table>
+            <tbody>${ev.elementos.map(el=>`<tr><td>${el.nombre}</td><td>${esc(el.existe||'-')}</td><td>${esc(el.cantidad||'-')}</td><td>${esc(el.ubicacion||'-')}</td><td>${esc(el.estado||'-')}</td><td style="text-align:center;">${pdfFotoCell(el)}</td></tr>`).join('')}</tbody></table>
           <div class="pdf-subcat">D. Plano existente</div>
           <table class="pdf-table"><thead><tr><th>Existe</th><th>Vigente</th><th>Coincide</th><th>Observaciones</th></tr></thead>
             <tbody><tr><td>${esc(ev.plano.existe||'-')}</td><td>${esc(ev.plano.vigente||'-')}</td><td>${esc(ev.plano.coincide||'-')}</td><td>${esc(ev.plano.obs||'-')}</td></tr></tbody></table>
@@ -3783,10 +3840,10 @@ function renderPreview() {
           <div class="pdf-h1" style="margin-top:0;">ANEXO · Planilla 2 – Control de extintores e hidrantes</div>
           <div class="pdf-subcat">A. Extintores</div>
           <table class="pdf-table"><thead><tr><th>N°</th><th>Ubicación de referencia</th><th>Agente/kg</th><th>Venc. carga</th><th>Venc. PH</th><th>Manóm./prec.</th><th>Acceso</th><th>Desvío</th><th>Foto</th></tr></thead>
-            <tbody>${fg.extintores.length ? fg.extintores.map((e,i)=>`<tr><td>${i+1}</td><td>${esc(e.ubicacion)}</td><td>${esc(e.agente)}</td><td>${esc(e.vencCarga)}</td><td>${esc(e.vencPH)}</td><td style="text-align:center;">${e.estadoVisual}</td><td style="text-align:center;">${e.acceso}</td><td>${e.desvio}</td><td>${esc(e.foto)}</td></tr>`).join('') : '<tr><td colspan="9">Sin datos</td></tr>'}</tbody></table>
+            <tbody>${fg.extintores.length ? fg.extintores.map((e,i)=>`<tr><td>${i+1}</td><td>${esc(e.ubicacion)}</td><td>${esc(e.agente)}</td><td>${esc(e.vencCarga)}</td><td>${esc(e.vencPH)}</td><td style="text-align:center;">${e.estadoVisual}</td><td style="text-align:center;">${e.acceso}</td><td>${e.desvio}</td><td style="text-align:center;">${pdfFotoCell(e)}</td></tr>`).join('') : '<tr><td colspan="9">Sin datos</td></tr>'}</tbody></table>
           <div class="pdf-subcat">B. Hidrantes / bocas de incendio</div>
           <table class="pdf-table"><thead><tr><th>N°</th><th>Ubicación de referencia</th><th>Gabinete</th><th>Manguera</th><th>Lanza</th><th>Llave</th><th>Acceso</th><th>Desvío</th><th>Foto</th></tr></thead>
-            <tbody>${fg.hidrantes.length ? fg.hidrantes.map((h,i)=>`<tr><td>${i+1}</td><td>${esc(h.ubicacion)}</td><td style="text-align:center;">${h.gabinete}</td><td style="text-align:center;">${h.manguera}</td><td style="text-align:center;">${h.lanza}</td><td style="text-align:center;">${h.llave}</td><td style="text-align:center;">${h.acceso}</td><td>${h.desvio}</td><td>${esc(h.foto)}</td></tr>`).join('') : '<tr><td colspan="9">Sin datos</td></tr>'}</tbody></table>
+            <tbody>${fg.hidrantes.length ? fg.hidrantes.map((h,i)=>`<tr><td>${i+1}</td><td>${esc(h.ubicacion)}</td><td style="text-align:center;">${h.gabinete}</td><td style="text-align:center;">${h.manguera}</td><td style="text-align:center;">${h.lanza}</td><td style="text-align:center;">${h.llave}</td><td style="text-align:center;">${h.acceso}</td><td>${h.desvio}</td><td style="text-align:center;">${pdfFotoCell(h)}</td></tr>`).join('') : '<tr><td colspan="9">Sin datos</td></tr>'}</tbody></table>
         </div>
         ${footerHtml(pageNum++)}
       </article>

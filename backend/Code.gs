@@ -221,6 +221,22 @@ function doGet(e) {
           return Object.assign({}, h, { photos: restored });
         });
       }
+      if (doc.anexos) {
+        const hydrateAnexos = (arr) => {
+          if (!Array.isArray(arr)) return;
+          arr.forEach(x => {
+            if (x && x.fotoDriveId) x.fotoDataUrl = driveFileToDataUrl(x.fotoDriveId);
+          });
+        };
+        if (doc.anexos.evac) {
+          hydrateAnexos(doc.anexos.evac.salidas);
+          hydrateAnexos(doc.anexos.evac.elementos);
+        }
+        if (doc.anexos.fuego) {
+          hydrateAnexos(doc.anexos.fuego.extintores);
+          hydrateAnexos(doc.anexos.fuego.hidrantes);
+        }
+      }
       return jsonOut({ ok: true, informe: doc });
     }
 
@@ -317,6 +333,32 @@ function doPost(e) {
       delete copy.photos;
       return copy;
     });
+
+    // Fotos de Anexos (Planilla 1 y 2) antes de guardar JSON
+    const uploadAnexoFotos = (arr, prefix) => {
+      if (!Array.isArray(arr)) return;
+      arr.forEach((x, idx) => {
+        if (!x) return;
+        if (x.fotoDataUrl && x.fotoDataUrl.indexOf('data:') === 0 && !x.fotoDriveId) {
+          const saved = saveDataUrlToDrive(visitFolder, x.fotoDataUrl, prefix + '_' + (idx + 1));
+          if (saved) {
+            x.fotoDriveId = saved.driveFileId;
+            x.fotoUrl = saved.url;
+          }
+        }
+        x.fotoDataUrl = '';
+      });
+    };
+    if (docToStore.anexos) {
+      if (docToStore.anexos.evac) {
+        uploadAnexoFotos(docToStore.anexos.evac.salidas, 'anexo_salida');
+        uploadAnexoFotos(docToStore.anexos.evac.elementos, 'anexo_elemento');
+      }
+      if (docToStore.anexos.fuego) {
+        uploadAnexoFotos(docToStore.anexos.fuego.extintores, 'anexo_extintor');
+        uploadAnexoFotos(docToStore.anexos.fuego.hidrantes, 'anexo_hidrante');
+      }
+    }
 
     // Guardar / sobrescribir informe_completo.json en Drive
     let jsonFileId = doc.jsonFileId || '';
@@ -459,7 +501,7 @@ function doPost(e) {
     }
 
     // 6. Anexos opcionales / obligatorios (solo si Completado)
-    const anexos = doc.anexos || {};
+    const anexos = docToStore.anexos || {};
     if (anexos.evacEstado === 'Completado' && anexos.evac) {
       const ev = anexos.evac;
       const shESec = ss.getSheetByName('Evac_Sectores');
@@ -474,7 +516,7 @@ function doPost(e) {
       if (shESal) {
         deleteRowsByVisitId(shESal, idVisita, 0);
         if (ev.salidas && ev.salidas.length) {
-          const r = ev.salidas.map((x,i) => [idVisita, c.fechaVisita||'', c.denominacion||'', i+1, x.ubicacion||'', x.tipo||'', x.ancho||'', x.apertura||'', x.libre||'', x.senalizada||'', x.foto||'']);
+          const r = ev.salidas.map((x,i) => [idVisita, c.fechaVisita||'', c.denominacion||'', i+1, x.ubicacion||'', x.tipo||'', x.ancho||'', x.apertura||'', x.libre||'', x.senalizada||'', x.fotoUrl||x.foto||'']);
           shESal.getRange(shESal.getLastRow()+1, 1, r.length, r[0].length).setValues(r);
         }
       }
@@ -482,7 +524,7 @@ function doPost(e) {
       if (shEEl) {
         deleteRowsByVisitId(shEEl, idVisita, 0);
         if (ev.elementos && ev.elementos.length) {
-          const r = ev.elementos.map(x => [idVisita, c.fechaVisita||'', c.denominacion||'', x.nombre||'', x.existe||'', x.cantidad||'', x.ubicacion||'', x.estado||'', x.foto||'']);
+          const r = ev.elementos.map(x => [idVisita, c.fechaVisita||'', c.denominacion||'', x.nombre||'', x.existe||'', x.cantidad||'', x.ubicacion||'', x.estado||'', x.fotoUrl||x.foto||'']);
           shEEl.getRange(shEEl.getLastRow()+1, 1, r.length, r[0].length).setValues(r);
         }
       }
@@ -499,7 +541,7 @@ function doPost(e) {
       if (shExt) {
         deleteRowsByVisitId(shExt, idVisita, 0);
         if (fg.extintores && fg.extintores.length) {
-          const r = fg.extintores.map((x,i) => [idVisita, c.fechaVisita||'', c.denominacion||'', i+1, x.ubicacion||'', x.agente||'', x.vencCarga||'', x.vencPH||'', x.estadoVisual||'', x.acceso||'', x.desvio||'', x.foto||'']);
+          const r = fg.extintores.map((x,i) => [idVisita, c.fechaVisita||'', c.denominacion||'', i+1, x.ubicacion||'', x.agente||'', x.vencCarga||'', x.vencPH||'', x.estadoVisual||'', x.acceso||'', x.desvio||'', x.fotoUrl||x.foto||'']);
           shExt.getRange(shExt.getLastRow()+1, 1, r.length, r[0].length).setValues(r);
         }
       }
@@ -507,7 +549,7 @@ function doPost(e) {
       if (shHid) {
         deleteRowsByVisitId(shHid, idVisita, 0);
         if (fg.hidrantes && fg.hidrantes.length) {
-          const r = fg.hidrantes.map((x,i) => [idVisita, c.fechaVisita||'', c.denominacion||'', i+1, x.ubicacion||'', x.gabinete||'', x.manguera||'', x.lanza||'', x.llave||'', x.acceso||'', x.desvio||'', x.foto||'']);
+          const r = fg.hidrantes.map((x,i) => [idVisita, c.fechaVisita||'', c.denominacion||'', i+1, x.ubicacion||'', x.gabinete||'', x.manguera||'', x.lanza||'', x.llave||'', x.acceso||'', x.desvio||'', x.fotoUrl||x.foto||'']);
           shHid.getRange(shHid.getLastRow()+1, 1, r.length, r[0].length).setValues(r);
         }
       }
